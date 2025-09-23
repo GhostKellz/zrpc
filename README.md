@@ -56,7 +56,7 @@ zrpc/
 Add zRPC as a dependency using `zig fetch`:
 
 ```bash
-zig fetch --save https://github.com/ghostkellz/zrpc
+zig fetch --save https://github.com/ghostkellz/zrpc/archive/refs/heads/main.tar.gz
 ```
 
 Or manually add to your `build.zig.zon`:

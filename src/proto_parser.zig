@@ -19,11 +19,11 @@ pub const ProtoFile = struct {
         return ProtoFile{
             .syntax = "proto3",
             .package = null,
-            .imports = std.ArrayList([]const u8).init(allocator),
+            .imports = std.ArrayList([]const u8){},
             .options = std.StringHashMap([]const u8).init(allocator),
-            .messages = std.ArrayList(MessageDef).init(allocator),
-            .enums = std.ArrayList(EnumDef).init(allocator),
-            .services = std.ArrayList(ServiceDef).init(allocator),
+            .messages = std.ArrayList(MessageDef){},
+            .enums = std.ArrayList(EnumDef){},
+            .services = std.ArrayList(ServiceDef){},
             .allocator = allocator,
         };
     }
@@ -36,7 +36,7 @@ pub const ProtoFile = struct {
         for (self.imports.items) |import| {
             self.allocator.free(import);
         }
-        self.imports.deinit();
+        self.imports.deinit(self.allocator);
 
         var opts_iter = self.options.iterator();
         while (opts_iter.next()) |entry| {
@@ -48,17 +48,17 @@ pub const ProtoFile = struct {
         for (self.messages.items) |*msg| {
             msg.deinit();
         }
-        self.messages.deinit();
+        self.messages.deinit(self.allocator);
 
         for (self.enums.items) |*enum_def| {
             enum_def.deinit();
         }
-        self.enums.deinit();
+        self.enums.deinit(self.allocator);
 
         for (self.services.items) |*service| {
             service.deinit();
         }
-        self.services.deinit();
+        self.services.deinit(self.allocator);
     }
 };
 
@@ -82,7 +82,7 @@ pub const FieldType = enum {
     enum_type,
 
     pub fn fromString(type_str: []const u8) ?FieldType {
-        const type_map = std.ComptimeStringMap(FieldType, .{
+        const type_map = std.StaticStringMap(FieldType).initComptime(.{
             .{ "double", .double },
             .{ "float", .float },
             .{ "int32", .int32 },
@@ -157,9 +157,9 @@ pub const MessageDef = struct {
     pub fn init(allocator: std.mem.Allocator, name: []const u8) !MessageDef {
         return MessageDef{
             .name = try allocator.dupe(u8, name),
-            .fields = std.ArrayList(FieldDef).init(allocator),
-            .nested_messages = std.ArrayList(MessageDef).init(allocator),
-            .nested_enums = std.ArrayList(EnumDef).init(allocator),
+            .fields = std.ArrayList(FieldDef){},
+            .nested_messages = std.ArrayList(MessageDef){},
+            .nested_enums = std.ArrayList(EnumDef){},
             .options = std.StringHashMap([]const u8).init(allocator),
             .allocator = allocator,
         };
@@ -171,17 +171,17 @@ pub const MessageDef = struct {
         for (self.fields.items) |*field| {
             field.deinit();
         }
-        self.fields.deinit();
+        self.fields.deinit(self.allocator);
 
         for (self.nested_messages.items) |*msg| {
             msg.deinit();
         }
-        self.nested_messages.deinit();
+        self.nested_messages.deinit(self.allocator);
 
         for (self.nested_enums.items) |*enum_def| {
             enum_def.deinit();
         }
-        self.nested_enums.deinit();
+        self.nested_enums.deinit(self.allocator);
 
         var opts_iter = self.options.iterator();
         while (opts_iter.next()) |entry| {
@@ -228,7 +228,7 @@ pub const EnumDef = struct {
     pub fn init(allocator: std.mem.Allocator, name: []const u8) !EnumDef {
         return EnumDef{
             .name = try allocator.dupe(u8, name),
-            .values = std.ArrayList(EnumValueDef).init(allocator),
+            .values = std.ArrayList(EnumValueDef){},
             .options = std.StringHashMap([]const u8).init(allocator),
             .allocator = allocator,
         };
@@ -240,7 +240,7 @@ pub const EnumDef = struct {
         for (self.values.items) |*value| {
             value.deinit();
         }
-        self.values.deinit();
+        self.values.deinit(self.allocator);
 
         var opts_iter = self.options.iterator();
         while (opts_iter.next()) |entry| {
@@ -295,7 +295,7 @@ pub const ServiceDef = struct {
     pub fn init(allocator: std.mem.Allocator, name: []const u8) !ServiceDef {
         return ServiceDef{
             .name = try allocator.dupe(u8, name),
-            .methods = std.ArrayList(MethodDef).init(allocator),
+            .methods = std.ArrayList(MethodDef){},
             .options = std.StringHashMap([]const u8).init(allocator),
             .allocator = allocator,
         };
@@ -307,7 +307,7 @@ pub const ServiceDef = struct {
         for (self.methods.items) |*method| {
             method.deinit();
         }
-        self.methods.deinit();
+        self.methods.deinit(self.allocator);
 
         var opts_iter = self.options.iterator();
         while (opts_iter.next()) |entry| {
@@ -342,7 +342,7 @@ pub const Lexer = struct {
     line: u32,
     column: u32,
 
-    const keywords = std.ComptimeStringMap(void, .{
+    const keywords = std.StaticStringMap(void).initComptime(.{
         .{"syntax"},     .{"package"},    .{"import"},     .{"option"},
         .{"message"},    .{"enum"},       .{"service"},    .{"rpc"},
         .{"returns"},    .{"stream"},     .{"optional"},   .{"required"},

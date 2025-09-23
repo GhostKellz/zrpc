@@ -10,6 +10,7 @@ pub const tls = @import("tls.zig");
 pub const protobuf = @import("protobuf.zig");
 pub const quic = @import("quic.zig");
 pub const quic_pool = @import("quic_pool.zig");
+pub const quic_grpc = @import("quic_grpc.zig");
 pub const auth = @import("auth.zig");
 pub const proto_parser = @import("proto_parser.zig");
 pub const codegen = @import("codegen.zig");
@@ -40,9 +41,16 @@ pub const PooledConnection = quic_pool.PooledConnection;
 pub const PoolConfig = quic_pool.PoolConfig;
 pub const LoadBalancingStrategy = quic_pool.LoadBalancingStrategy;
 
+// QUIC-gRPC integration
+pub const QuicGrpcTransport = quic_grpc.QuicGrpcTransport;
+pub const QuicGrpcConnection = quic_grpc.QuicGrpcConnection;
+pub const QuicGrpcServer = quic_grpc.QuicGrpcServer;
+pub const QuicGrpcClient = quic_grpc.QuicGrpcClient;
+pub const GrpcStream = quic_grpc.GrpcStream;
+
 // Authentication
 pub const JwtToken = auth.JwtToken;
-pub const OAuth2Token = auth.OAuth2Token;
+pub const OAuth2TokenResponse = auth.OAuth2TokenResponse;
 pub const AuthMiddleware = auth.AuthMiddleware;
 
 // Protocol Buffer parsing and code generation

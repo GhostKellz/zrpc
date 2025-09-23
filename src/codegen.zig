@@ -35,13 +35,13 @@ pub const CodeGenerator = struct {
         return CodeGenerator{
             .allocator = allocator,
             .options = options,
-            .output_buffer = std.ArrayList(u8).init(allocator),
+            .output_buffer = std.ArrayList(u8){},
             .indent_level = 0,
         };
     }
 
     pub fn deinit(self: *CodeGenerator) void {
-        self.output_buffer.deinit();
+        self.output_buffer.deinit(self.allocator);
     }
 
     pub fn generateFromProto(self: *CodeGenerator, proto_file: *const proto_parser.ProtoFile) ![]const u8 {
@@ -554,7 +554,8 @@ pub const CodeGenerator = struct {
 
     fn writef(self: *CodeGenerator, comptime fmt: []const u8, args: anytype) !void {
         try self.writeIndent();
-        try self.output_buffer.writer(self.allocator).print(fmt, args);
+        var writer = std.Io.Writer.fromArrayList(&self.output_buffer);
+        try writer.print(fmt, args);
         try self.output_buffer.append(self.allocator, '\n');
     }
 
@@ -571,7 +572,8 @@ pub fn generateZigCode(allocator: std.mem.Allocator, proto_file: *const proto_pa
     var generator = CodeGenerator.init(allocator, options);
     defer generator.deinit();
 
-    return try generator.generateFromProto(proto_file);
+    const result = try generator.generateFromProto(proto_file);
+    return try allocator.dupe(u8, result);
 }
 
 pub fn generateFromProtoFile(allocator: std.mem.Allocator, proto_path: []const u8, options: CodegenOptions) ![]u8 {

@@ -142,6 +142,26 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
+    // Add example executable
+    const example_exe = b.addExecutable(.{
+        .name = "quic_grpc_example",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/quic_grpc_example.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zrpc", .module = mod },
+            },
+        }),
+    });
+    b.installArtifact(example_exe);
+
+    // Example run step
+    const example_step = b.step("example", "Run the QUIC-gRPC example");
+    const example_run = b.addRunArtifact(example_exe);
+    example_run.step.dependOn(b.getInstallStep());
+    example_step.dependOn(&example_run.step);
+
     // Just like flags, top level steps are also listed in the `--help` menu.
     //
     // The Zig build system is entirely implemented in userland, which means

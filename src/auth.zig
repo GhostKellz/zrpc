@@ -20,10 +20,12 @@ pub const JwtHeader = struct {
             try json_obj.put("kid", std.json.Value{ .string = kid });
         }
 
-        var json_str = std.ArrayList(u8).init(allocator);
-        defer json_str.deinit();
+        var json_str = std.ArrayList(u8){};
+        defer json_str.deinit(allocator);
 
-        try std.json.stringify(std.json.Value{ .object = json_obj }, .{}, json_str.writer());
+        var writer = std.Io.Writer.fromArrayList(&json_str);
+        const fmt_value = std.json.fmt(std.json.Value{ .object = json_obj }, .{});
+        try fmt_value.format(&writer);
         return try base64UrlEncode(allocator, json_str.items);
     }
 
@@ -157,10 +159,12 @@ pub const JwtClaims = struct {
         if (self.jti) |jti| try json_obj.put("jti", std.json.Value{ .string = jti });
         if (self.scope) |scope| try json_obj.put("scope", std.json.Value{ .string = scope });
 
-        var json_str = std.ArrayList(u8).init(allocator);
-        defer json_str.deinit();
+        var json_str = std.ArrayList(u8){};
+        defer json_str.deinit(allocator);
 
-        try std.json.stringify(std.json.Value{ .object = json_obj }, .{}, json_str.writer());
+        var writer = std.Io.Writer.fromArrayList(&json_str);
+        const fmt_value = std.json.fmt(std.json.Value{ .object = json_obj }, .{});
+        try fmt_value.format(&writer);
         return try base64UrlEncode(allocator, json_str.items);
     }
 };
@@ -250,7 +254,7 @@ pub const JwtToken = struct {
     }
 
     pub fn decode(allocator: std.mem.Allocator, token_str: []const u8) !JwtToken {
-        var parts = std.mem.split(u8, token_str, ".");
+        var parts = std.mem.splitSequence(u8, token_str, ".");
 
         const header_part = parts.next() orelse return Error.InvalidArgument;
         const claims_part = parts.next() orelse return Error.InvalidArgument;

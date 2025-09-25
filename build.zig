@@ -21,25 +21,57 @@ pub fn build(b: *std.Build) void {
     // target and optimize options) will be listed when running `zig build --help`
     // in this directory.
 
-    // This creates a module, which represents a collection of source files alongside
-    // some compilation options, such as optimization mode and linked system libraries.
-    // Zig modules are the preferred way of making Zig code available to consumers.
-    // addModule defines a module that we intend to make available for importing
-    // to our consumers. We must give it a name because a Zig package can expose
-    // multiple modules and consumers will need to be able to specify which
-    // module they want to access.
-    const mod = b.addModule("zrpc", .{
-        // The root source file is the "entry point" of this module. Users of
-        // this module will only be able to access public declarations contained
-        // in this file, which means that if you have declarations that you
-        // intend to expose to consumers that were defined in other files part
-        // of this module, you will have to make sure to re-export them from
-        // the root file.
-        .root_source_file = b.path("src/root.zig"),
-        // Later on we'll use this module as the root module of a test executable
-        // which requires us to specify a target.
+    // Core codec options (only these flags allowed in core)
+    const enable_protobuf = b.option(bool, "protobuf", "Enable protobuf codec support (default: true)") orelse true;
+    const enable_json = b.option(bool, "json", "Enable JSON codec support (default: true)") orelse true;
+    const enable_codegen = b.option(bool, "codegen", "Enable code generation support (default: true)") orelse true;
+
+    // Transport adapter options
+    const enable_quic = b.option(bool, "quic", "Enable QUIC transport adapter (default: true)") orelse true;
+    _ = b.option(bool, "http2", "Enable HTTP/2 transport adapter (default: false - not implemented)") orelse false;
+
+    // Create zrpc-core module (transport-agnostic)
+    const core_mod = b.addModule("zrpc-core", .{
+        .root_source_file = b.path("src/core.zig"),
         .target = target,
     });
+
+    // Configure codec compilation options for core
+    const core_options = b.addOptions();
+    core_options.addOption(bool, "enable_protobuf", enable_protobuf);
+    core_options.addOption(bool, "enable_json", enable_json);
+    core_options.addOption(bool, "enable_codegen", enable_codegen);
+
+    core_mod.addOptions("config", core_options);
+
+    // Create QUIC transport adapter module
+    var quic_mod: ?*std.Build.Module = null;
+    if (enable_quic) {
+        quic_mod = b.addModule("zrpc-transport-quic", .{
+            .root_source_file = b.path("src/adapters/quic.zig"),
+            .target = target,
+            .imports = &.{
+                .{ .name = "zrpc-core", .module = core_mod },
+            },
+        });
+
+        // ALPHA-1: Using mock transport, no need for real QUIC dependency yet
+        // Will be added back in ALPHA-2
+    }
+
+    // Create main zrpc module for backward compatibility
+    const mod = b.addModule("zrpc", .{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .imports = &.{
+            .{ .name = "zrpc-core", .module = core_mod },
+        },
+    });
+
+    // Add QUIC adapter if enabled
+    if (quic_mod) |qmod| {
+        mod.addImport("zrpc-transport-quic", qmod);
+    }
 
     // Here we define an executable. An executable needs to have a root module
     // which needs to expose a `main` function. While we could add a main function
@@ -150,7 +182,9 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "zrpc", .module = mod },
+                .{ .name = "zrpc-core", .module = core_mod },
+                .{ .name = "zrpc-transport-quic", .module = quic_mod orelse @panic("QUIC adapter required for example") },
+                .{ .name = "zrpc", .module = mod }, // For backward compatibility
             },
         }),
     });
@@ -161,6 +195,68 @@ pub fn build(b: *std.Build) void {
     const example_run = b.addRunArtifact(example_exe);
     example_run.step.dependOn(b.getInstallStep());
     example_step.dependOn(&example_run.step);
+
+    // Add ALPHA-1 test executable
+    const alpha_test_exe = b.addExecutable(.{
+        .name = "alpha_test",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/alpha_test.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zrpc-core", .module = core_mod },
+                .{ .name = "zrpc-transport-quic", .module = quic_mod orelse @panic("QUIC adapter required for alpha test") },
+            },
+        }),
+    });
+    b.installArtifact(alpha_test_exe);
+
+    // ALPHA-1 test run step
+    const alpha_test_step = b.step("alpha1", "Run ALPHA-1 acceptance tests");
+    const alpha_test_run = b.addRunArtifact(alpha_test_exe);
+    alpha_test_run.step.dependOn(b.getInstallStep());
+    alpha_test_step.dependOn(&alpha_test_run.step);
+
+    // BETA test executable with contract tests and benchmarks
+    const beta_test_exe = b.addExecutable(.{
+        .name = "beta_test",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/beta_test.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zrpc-core", .module = core_mod },
+                .{ .name = "zrpc-transport-quic", .module = quic_mod orelse @panic("QUIC adapter required for beta test") },
+            },
+        }),
+    });
+    b.installArtifact(beta_test_exe);
+
+    // BETA test run step
+    const beta_test_step = b.step("beta", "Run BETA acceptance tests with benchmarks");
+    const beta_test_run = b.addRunArtifact(beta_test_exe);
+    beta_test_run.step.dependOn(b.getInstallStep());
+    beta_test_step.dependOn(&beta_test_run.step);
+
+    // Benchmark-only step (ReleaseFast)
+    const bench_exe = b.addExecutable(.{
+        .name = "benchmark",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/beta_test.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "zrpc-core", .module = core_mod },
+                .{ .name = "zrpc-transport-quic", .module = quic_mod orelse @panic("QUIC adapter required for benchmarks") },
+            },
+        }),
+    });
+    b.installArtifact(bench_exe);
+
+    const bench_step = b.step("bench", "Run performance benchmarks (ReleaseFast)");
+    const bench_run = b.addRunArtifact(bench_exe);
+    bench_run.step.dependOn(b.getInstallStep());
+    bench_step.dependOn(&bench_run.step);
 
     // Just like flags, top level steps are also listed in the `--help` menu.
     //

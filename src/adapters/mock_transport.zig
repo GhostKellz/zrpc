@@ -23,7 +23,7 @@ pub const MockTransportAdapter = struct {
     }
 
     pub fn deinit(self: *MockTransportAdapter) void {
-        _ = self;
+        self.allocator.destroy(self);
     }
 
     pub fn connect(self: *MockTransportAdapter, allocator: std.mem.Allocator, endpoint: []const u8, tls_config: ?*const TlsConfig) TransportError!Connection {
@@ -31,6 +31,14 @@ pub const MockTransportAdapter = struct {
         _ = tls_config;
 
         std.debug.print("Mock: Connecting to {s}\n", .{endpoint});
+
+        // Simulate error cases for contract testing
+        if (std.mem.eql(u8, endpoint, "invalid-endpoint")) {
+            return TransportError.InvalidArgument;
+        }
+        if (std.mem.eql(u8, endpoint, "192.0.2.0:1")) {
+            return TransportError.ConnectionReset;
+        }
 
         const conn = try allocator.create(MockConnectionAdapter);
         conn.* = MockConnectionAdapter{

@@ -1,11 +1,14 @@
 # zRPC Quickstart Guide
 
-Get up and running with zRPC in under 10 minutes! This guide shows you how to build a simple gRPC-over-QUIC service using the modular architecture.
+**Version: 2.0.0-rc.5** | **Status: Release Preview** 🎬
+
+Get up and running with zRPC in under 10 minutes! This guide shows you how to build a simple gRPC-over-QUIC service using the **transport-agnostic modular architecture**.
 
 ## Prerequisites
 
-- Zig 0.16.0-dev or later
+- Zig 0.16.0-dev.164+ or later
 - Basic familiarity with gRPC concepts
+- Optional: Understanding of QUIC protocol basics
 
 ## Step 1: Project Setup (2 minutes)
 

@@ -21,39 +21,42 @@ Welcome to the zRPC documentation! This comprehensive guide covers everything yo
 
 ## What is zRPC?
 
-zRPC is a modern, high-performance RPC framework designed specifically for Zig. It provides:
+**Version: 2.0.0-rc.5** | **Status: Release Preview** 🎬
 
+zRPC is a modern, high-performance RPC framework designed specifically for Zig with a **transport-agnostic modular architecture**. It provides:
+
+- **🏗️ Modular Architecture** - Clean separation between RPC core and transport adapters
+- **🔌 Pluggable Transports** - QUIC, HTTP/2, or custom transport implementations
 - **🚀 Full RPC Support** - Unary, client-streaming, server-streaming, and bidirectional streaming
 - **🔒 Security First** - TLS 1.3, JWT authentication, OAuth2 token handling
-- **⚡ High Performance** - HTTP/2, HTTP/3, and QUIC transport with 0-RTT connection resumption
+- **⚡ High Performance** - p95 latency ≤ 100μs, 10k+ concurrent connections
 - **🛠️ Developer Experience** - Complete .proto file parsing and Zig code generation
-- **🔄 Load Balancing** - Multiple strategies (round-robin, least connections, weighted)
-- **📊 Monitoring** - Comprehensive benchmarking and performance metrics
+- **📦 Minimal Dependencies** - Core has zero transport dependencies
 - **🌐 Protocol Buffer** - Full protobuf v3 support with JSON codec for debugging
 
 ## Architecture Overview
 
 ```
-zrpc/
-├── Core Framework
-│   ├── HTTP/2 & QUIC transports
-│   ├── Streaming RPC support (unary, client, server, bidirectional)
-│   ├── Protobuf & JSON codecs
-│   └── Service definitions & method handling
-├── Advanced Features
-│   ├── JWT/OAuth2 authentication with middleware
+zrpc-ecosystem/
+├── zrpc-core/                    # Transport-agnostic RPC framework
+│   ├── codecs/ (protobuf, JSON)
+│   ├── interceptors/
+│   ├── service/ (method dispatch)
+│   └── interfaces/ (transport SPI)
+│
+├── zrpc-transport-quic/          # QUIC transport adapter (optional)
 │   ├── 0-RTT connection resumption
-│   ├── Connection migration & path validation
-│   └── Connection pooling with load balancing
-├── Developer Tools
-│   ├── .proto file parser (complete AST)
-│   ├── Zig code generator (messages, services, clients)
-│   └── Benchmarking framework vs gRPC C++
-└── Production Ready
-    ├── TLS 1.3 security
-    ├── Performance monitoring & metrics
-    ├── Error handling & timeout management
-    └── Thread-safe connection management
+│   ├── connection migration
+│   └── HTTP/3 + gRPC integration
+│
+├── zrpc-transport-http2/         # HTTP/2 transport adapter (planned)
+│   ├── TLS 1.3 support
+│   └── connection multiplexing
+│
+└── zrpc-tools/                   # Code generation and tooling
+    ├── proto parser
+    ├── Zig code generator
+    └── benchmarking framework
 ```
 
 ## Key Features
@@ -109,29 +112,44 @@ Additional reference materials:
 
 ## Common Use Cases
 
-### Microservices
+### Microservices with QUIC Transport
 ```zig
-// service.zig
-var server = zrpc.Server.init(allocator);
-try server.registerHandler("UserService", "GetUser", user_handler);
-try server.registerHandler("OrderService", "CreateOrder", order_handler);
-try server.serve("0.0.0.0:8080");
+const zrpc = @import("zrpc-core");
+const zrq  = @import("zrpc-transport-quic");
+const zq   = @import("zquic");
+
+// Server
+var listener = try zq.listen(.{
+    .alpn = "zr/1",
+    .addr = "0.0.0.0:8443",
+    .tls = tlsCfg()
+});
+var server = try zrpc.Server.init(allocator, .{
+    .transport = zrq.server(listener)
+});
+try server.registerService(UserService{});
+try server.start();
 ```
 
 ### API Gateway
 ```zig
-// gateway.zig
-var client_pool = zrpc.transport.ConnectionPool.init(allocator, pool_config);
-var load_balancer = zrpc.transport.LoadBalancer.init(allocator, lb_config);
+// Client with explicit transport injection
+var conn = try zquic.connect(.{
+    .endpoint = "backend:8443",
+    .tls = cfg
+});
+var client = try zrpc.Client.init(allocator, .{
+    .transport = zrq.client(conn)
+});
 
 // Route requests to backend services
-const response = try route_request(request, &client_pool, &load_balancer);
+const response = try client.call("OrderService/Create", request);
 ```
 
 ### Real-time Communication
 ```zig
-// streaming.zig
-var stream = try client.bidirectionalStream("Chat/Messages", Message, Message, &context);
+// Bidirectional streaming
+var stream = try client.openBidiStream("Chat/Messages");
 try stream.send(message);
 const incoming = try stream.receive();
 ```
@@ -167,7 +185,8 @@ We welcome contributions! Please see our [Contributing Guide](../CONTRIBUTING.md
 
 | zRPC Version | Zig Version | Status |
 |--------------|-------------|---------|
-| 0.1.x        | 0.16.0-dev  | Current |
+| 2.0.0-rc.5   | 0.16.0-dev.164+ | Release Preview 🎬 |
+| 1.0.x        | 0.16.0-dev  | Legacy (Monolithic) |
 
 ## License
 

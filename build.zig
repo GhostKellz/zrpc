@@ -47,16 +47,21 @@ pub fn build(b: *std.Build) void {
     // Create QUIC transport adapter module
     var quic_mod: ?*std.Build.Module = null;
     if (enable_quic) {
+        // Get zquic dependency
+        const zquic_dep = b.dependency("zquic", .{
+            .target = target,
+            .optimize = optimize,
+        });
+        const zquic_mod = zquic_dep.module("zquic");
+
         quic_mod = b.addModule("zrpc-transport-quic", .{
             .root_source_file = b.path("src/adapters/quic.zig"),
             .target = target,
             .imports = &.{
                 .{ .name = "zrpc-core", .module = core_mod },
+                .{ .name = "zquic", .module = zquic_mod },
             },
         });
-
-        // ALPHA-1: Using mock transport, no need for real QUIC dependency yet
-        // Will be added back in ALPHA-2
     }
 
     // Create main zrpc module for backward compatibility
@@ -284,6 +289,53 @@ pub fn build(b: *std.Build) void {
 
     // RC2 test run step (isolated from other builds due to API compatibility issues)
     _ = b.step("rc2", "RC2 security & performance hardening: ARCHITECTURALLY COMPLETE");
+
+    // RC4 test executable - Stress testing and edge case handling
+    const rc4_test_exe = b.addExecutable(.{
+        .name = "rc4_test",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/rc4_test.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zrpc-core", .module = core_mod },
+                .{ .name = "zrpc-transport-quic", .module = quic_mod orelse @panic("QUIC adapter required for RC4 test") },
+            },
+        }),
+    });
+    b.installArtifact(rc4_test_exe);
+
+    // RC4 test run step
+    const rc4_test_step = b.step("rc4", "Run RC4 stress testing and edge case handling");
+    const rc4_test_run = b.addRunArtifact(rc4_test_exe);
+    rc4_test_run.step.dependOn(b.getInstallStep());
+    rc4_test_step.dependOn(&rc4_test_run.step);
+
+    // RC5 test executable - Final validation and release preparation
+    const rc5_test_exe = b.addExecutable(.{
+        .name = "rc5_test",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/rc5_test.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zrpc-core", .module = core_mod },
+                .{ .name = "zrpc-transport-quic", .module = quic_mod orelse @panic("QUIC adapter required for RC5 test") },
+            },
+        }),
+    });
+    b.installArtifact(rc5_test_exe);
+
+    // RC5 test run step
+    const rc5_test_step = b.step("rc5", "Run RC5 final validation and release preparation");
+    const rc5_test_run = b.addRunArtifact(rc5_test_exe);
+    rc5_test_run.step.dependOn(b.getInstallStep());
+    rc5_test_step.dependOn(&rc5_test_run.step);
+
+    // Release Preview build step
+    const preview_step = b.step("preview", "Build release preview version");
+    preview_step.dependOn(&rc4_test_run.step);
+    preview_step.dependOn(&rc5_test_run.step);
 
     // Just like flags, top level steps are also listed in the `--help` menu.
     //

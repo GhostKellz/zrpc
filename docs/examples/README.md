@@ -267,6 +267,39 @@ zig build test-integration
 zig build test-contract
 ```
 
+### [RC-4: Stress Testing](../../examples/rc4_test.zig) 🆕
+**Release Candidate validation: Stress testing and edge case handling**
+
+**What it demonstrates:**
+- High connection count testing (10k+ concurrent)
+- Long-running connection stability
+- Network failure resilience
+- Resource exhaustion recovery
+- Malformed packet handling
+- Network partition scenarios
+- Rapid connect/disconnect cycles
+- Memory pressure scenarios
+
+**Run:**
+```bash
+zig build rc4
+```
+
+### [RC-5: Final Validation](../../examples/rc5_test.zig) 🆕
+**Release Candidate validation: End-to-end integration and performance**
+
+**What it demonstrates:**
+- End-to-end integration tests
+- Performance benchmarking (p95 ≤ 100μs)
+- Resource usage profiling
+- Backward compatibility verification
+
+**Run:**
+```bash
+zig build rc5
+zig build preview  # Run both RC-4 and RC-5
+```
+
 ### [Mock Transport](mock-transport/)
 Testing with mock transport adapter.
 

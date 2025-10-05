@@ -3,6 +3,8 @@
 
   # zRPC
 
+  [![Version](https://img.shields.io/badge/Version-2.0.0--rc.5-brightgreen.svg)](RELEASE_NOTES.md)
+  [![Status](https://img.shields.io/badge/Status-Release%20Preview-blue.svg)](TODO.md)
   [![Made with Zig](https://img.shields.io/badge/Made%20with-Zig-yellow.svg)](https://ziglang.org/)
   [![Zig 0.16.0-dev](https://img.shields.io/badge/Zig-0.16.0--dev-orange.svg)](https://ziglang.org/download/)
   [![QUIC](https://img.shields.io/badge/QUIC-RFC%209000-blue.svg)](https://tools.ietf.org/html/rfc9000)

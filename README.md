@@ -3,8 +3,8 @@
 
   # zRPC
 
-  [![Version](https://img.shields.io/badge/Version-2.0.0--rc.5-brightgreen.svg)](RELEASE_NOTES.md)
-  [![Status](https://img.shields.io/badge/Status-Release%20Preview-blue.svg)](TODO.md)
+  [![Version](https://img.shields.io/badge/Version-0.1.0-brightgreen.svg)](RELEASE_NOTES.md)
+  [![Status](https://img.shields.io/badge/Status-Stable-blue.svg)](TODO.md)
   [![Made with Zig](https://img.shields.io/badge/Made%20with-Zig-yellow.svg)](https://ziglang.org/)
   [![Zig 0.16.0-dev](https://img.shields.io/badge/Zig-0.16.0--dev-orange.svg)](https://ziglang.org/download/)
   [![QUIC](https://img.shields.io/badge/QUIC-RFC%209000-blue.svg)](https://tools.ietf.org/html/rfc9000)
@@ -104,12 +104,8 @@ pub const Stream = struct {
 
 ```zig
 .dependencies = .{
-    .@"zrpc-core" = .{
-        .url = "https://github.com/ghostkellz/zrpc/releases/download/v0.4.0-beta.1/zrpc-core.tar.gz",
-        .hash = "...", // Will be filled by `zig fetch`
-    },
-    .@"zrpc-transport-quic" = .{
-        .url = "https://github.com/ghostkellz/zrpc/releases/download/v0.1.0-beta.1/zrpc-transport-quic.tar.gz",
+    .zrpc = .{
+        .url = "https://github.com/ghostkellz/zrpc/archive/refs/tags/v0.1.0.tar.gz",
         .hash = "...", // Will be filled by `zig fetch`
     },
 },
@@ -118,8 +114,12 @@ pub const Stream = struct {
 **Step 2**: Add to your `build.zig`:
 
 ```zig
-const zrpc_core = b.dependency("zrpc-core", .{}).module("zrpc-core");
-const zrpc_quic = b.dependency("zrpc-transport-quic", .{}).module("zrpc-transport-quic");
+const zrpc_dep = b.dependency("zrpc", .{
+    .target = target,
+    .optimize = optimize,
+});
+const zrpc_core = zrpc_dep.module("zrpc-core");
+const zrpc_quic = zrpc_dep.module("zrpc-transport-quic");
 
 exe.root_module.addImport("zrpc-core", zrpc_core);
 exe.root_module.addImport("zrpc-transport-quic", zrpc_quic);

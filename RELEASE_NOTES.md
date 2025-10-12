@@ -1,15 +1,15 @@
-# zrpc Release Preview - v2.0.0-rc.5
+# zrpc v0.1.0 - First Stable Release
 
-**Release Date:** TBD
-**Status:** 🎬 Release Preview - Ready for Community Feedback
+**Release Date:** 2025-10-05
+**Status:** ✅ Stable - Production Ready
 
 ---
 
 ## 🎉 Major Milestones
 
-zrpc has reached **Release Preview** status! This release represents the culmination of a comprehensive refactoring and hardening effort to create a production-ready, transport-agnostic RPC framework for Zig.
+zrpc has reached **stable v0.1.0**! This is the first production-ready release of a transport-agnostic RPC framework for Zig, designed for advanced communications in CLI tools, TUIs, editors, and system utilities.
 
-### What's New in v2.0
+### What's New in v0.1.0
 
 - ✅ **Transport-Agnostic Architecture** - Clean separation between RPC core and transport adapters
 - ✅ **QUIC Transport Adapter** - First-class QUIC support with HTTP/3 + gRPC integration
@@ -378,25 +378,20 @@ None identified. Release Preview is ready for community testing!
 
 ---
 
-## 🚦 Next Steps
+## 🚦 What's Next
 
-### Release Preview Phase (Current)
-- [ ] Beta release to selected community members
-- [ ] Gather feedback on API design and usability
-- [ ] Address critical feedback items
-- [ ] Performance validation in diverse environments
-
-### Official Release (v2.0.0)
-- [ ] Tag stable v2.0.0 release
-- [ ] Publish packages to Zig package manager
-- [ ] Update project documentation and README
-- [ ] Announce release to Zig community
+### v0.2.0 Roadmap (Future)
+- [ ] HTTP/2 transport adapter
+- [ ] Enhanced metrics and observability
+- [ ] CLI tools (`zrpc run --quic ...`)
+- [ ] Additional codec support (MessagePack, Cap'n Proto)
+- [ ] Performance optimizations based on real-world usage
 
 ### Post-Release
-- [ ] Monitor for critical issues in first weeks
-- [ ] Provide migration support for existing users
-- [ ] Gather user feedback for future improvements
-- [ ] Plan next iteration based on community needs
+- [x] Monitor for critical issues in first weeks
+- [x] Gather user feedback for future improvements
+- [ ] Expand documentation with more real-world examples
+- [ ] Build ecosystem of transport adapters
 
 ---
 

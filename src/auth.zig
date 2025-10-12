@@ -20,7 +20,7 @@ pub const JwtHeader = struct {
             try json_obj.put("kid", std.json.Value{ .string = kid });
         }
 
-        var json_str = std.ArrayList(u8){};
+        var json_str: std.ArrayList(u8) = .{};
         defer json_str.deinit(allocator);
 
         var writer = std.Io.Writer.fromArrayList(&json_str);
@@ -159,7 +159,7 @@ pub const JwtClaims = struct {
         if (self.jti) |jti| try json_obj.put("jti", std.json.Value{ .string = jti });
         if (self.scope) |scope| try json_obj.put("scope", std.json.Value{ .string = scope });
 
-        var json_str = std.ArrayList(u8){};
+        var json_str: std.ArrayList(u8) = .{};
         defer json_str.deinit(allocator);
 
         var writer = std.Io.Writer.fromArrayList(&json_str);

@@ -4,12 +4,14 @@
 const std = @import("std");
 
 // Core exports
-pub const Client = @import("core/client.zig").Client;
-pub const Server = @import("core/server.zig").Server;
-pub const ClientConfig = @import("core/client.zig").ClientConfig;
-pub const ServerConfig = @import("core/server.zig").ServerConfig;
-pub const RequestContext = @import("core/server.zig").RequestContext;
-pub const ResponseContext = @import("core/server.zig").ResponseContext;
+pub const server = @import("core/server.zig");
+pub const client = @import("core/client.zig");
+pub const Client = client.Client;
+pub const Server = server.Server;
+pub const ClientConfig = client.ClientConfig;
+pub const ServerConfig = server.ServerConfig;
+pub const RequestContext = server.RequestContext;
+pub const ResponseContext = server.ResponseContext;
 
 // RC2: Security and performance hardening modules (disabled due to API compatibility)
 // pub const security = @import("security.zig");

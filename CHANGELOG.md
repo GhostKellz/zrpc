@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - zsync v0.6.0 Integration (2025-10-15)
+
+#### Async Runtime Integration
+- **zsync v0.6.0** integrated for production-grade async operations
+- Added `Server.initWithRuntime()` - new init method for async server
+- Task spawning via `zsync.Executor` for concurrent connection handling
+- Connection limiting via `zsync.Semaphore` (respects `max_concurrent_connections`)
+- Rate limiting via `zsync.TokenBucket` (1000 req/sec, burst 100)
+- Graceful shutdown via `zsync.WaitGroup` (waits for all connections)
+- Channel-based streaming in `src/streaming_async.zig` (client/server/bidirectional)
+- Example application: `examples/zsync_async_server.zig`
+
+#### Technical Details
+- Thread-safe `Server.is_running` using `std.atomic.Value(bool)`
+- `Server.deinit()` enhanced with WaitGroup synchronization
+- Build system updated with zsync module imports
+- `Server.serve()` supports both sync (backward compat) and async modes
+- **Zero-cost abstraction**: async features opt-in, no overhead when unused
+
+#### Backward Compatibility
+- Existing `Server.init()` unchanged - fully backward compatible
+- All gRPC protocol handling preserved (framing, HPACK, protobuf)
+- Transport adapters unchanged (QUIC, HTTP/2, HTTP/3, WebSocket)
+- Authentication and code generation unchanged
+
+#### Build Commands
+- Run async example: `zig build zsync-example`
+- All existing build commands work as before
+
 ### Added - Phase 2: Observability & Monitoring - COMPLETE (2025-10-12)
 
 #### OpenTelemetry Distributed Tracing

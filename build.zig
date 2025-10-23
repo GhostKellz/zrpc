@@ -30,10 +30,20 @@ pub fn build(b: *std.Build) void {
     const enable_quic = b.option(bool, "quic", "Enable QUIC transport adapter (default: true)") orelse true;
     _ = b.option(bool, "http2", "Enable HTTP/2 transport adapter (default: false - not implemented)") orelse false;
 
+    // Get zsync dependency for async runtime
+    const zsync_dep = b.dependency("zsync", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const zsync_mod = zsync_dep.module("zsync");
+
     // Create zrpc-core module (transport-agnostic)
     const core_mod = b.addModule("zrpc-core", .{
         .root_source_file = b.path("src/core.zig"),
         .target = target,
+        .imports = &.{
+            .{ .name = "zsync", .module = zsync_mod },
+        },
     });
 
     // Configure codec compilation options for core
@@ -336,6 +346,26 @@ pub fn build(b: *std.Build) void {
     const preview_step = b.step("preview", "Build release preview version");
     preview_step.dependOn(&rc4_test_run.step);
     preview_step.dependOn(&rc5_test_run.step);
+
+    // zsync async server example
+    const zsync_example_exe = b.addExecutable(.{
+        .name = "zsync_async_server",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/zsync_async_server.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zrpc-core", .module = core_mod },
+                .{ .name = "zsync", .module = zsync_mod },
+            },
+        }),
+    });
+    b.installArtifact(zsync_example_exe);
+
+    const zsync_example_step = b.step("zsync-example", "Run zsync async server example");
+    const zsync_example_run = b.addRunArtifact(zsync_example_exe);
+    zsync_example_run.step.dependOn(b.getInstallStep());
+    zsync_example_step.dependOn(&zsync_example_run.step);
 
     // Just like flags, top level steps are also listed in the `--help` menu.
     //

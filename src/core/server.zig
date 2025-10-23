@@ -2,6 +2,7 @@
 //! Takes a Transport interface and provides RPC serving functionality
 
 const std = @import("std");
+const zsync = @import("zsync");
 const transport_interface = @import("../transport_interface.zig");
 const Error = @import("../error.zig").Error;
 
@@ -89,8 +90,15 @@ pub const Server = struct {
     listener: ?Listener,
     config: ServerConfig,
     handlers: std.StringHashMap(ServiceHandler),
-    is_running: bool,
+    is_running: std.atomic.Value(bool),
     active_connections: std.ArrayList(*ActiveConnection),
+
+    // zsync integration for async operations
+    runtime: ?*zsync.Runtime = null,
+    executor: ?zsync.Executor = null,
+    connection_semaphore: ?zsync.Semaphore = null,
+    shutdown_wg: zsync.WaitGroup,
+    rate_limiter: ?zsync.TokenBucket = null,
 
     const ActiveConnection = struct {
         connection: Connection,
@@ -112,13 +120,47 @@ pub const Server = struct {
             .listener = null,
             .config = config,
             .handlers = std.StringHashMap(ServiceHandler).init(allocator),
-            .is_running = false,
+            .is_running = std.atomic.Value(bool).init(false),
             .active_connections = std.ArrayList(*ActiveConnection){},
+            .shutdown_wg = zsync.WaitGroup.init(),
         };
+    }
+
+    /// Initialize with zsync async runtime for production use
+    pub fn initWithRuntime(allocator: std.mem.Allocator, config: ServerConfig) !Server {
+        // Create executor for managing connection tasks (creates its own runtime)
+        const executor = try zsync.Executor.init(allocator);
+        const runtime = executor.runtime;
+
+        // Create semaphore to limit concurrent connections
+        const semaphore = zsync.Semaphore.init(config.max_concurrent_connections);
+
+        // Create rate limiter (1000 req/sec with burst of 100)
+        const rate_limiter = zsync.TokenBucket.init(100, 1000);
+
+        const server = Server{
+            .allocator = allocator,
+            .transport = config.transport,
+            .listener = null,
+            .config = config,
+            .handlers = std.StringHashMap(ServiceHandler).init(allocator),
+            .is_running = std.atomic.Value(bool).init(false),
+            .active_connections = std.ArrayList(*ActiveConnection){},
+            .runtime = runtime,
+            .executor = executor,
+            .connection_semaphore = semaphore,
+            .shutdown_wg = zsync.WaitGroup.init(),
+            .rate_limiter = rate_limiter,
+        };
+
+        return server;
     }
 
     pub fn deinit(self: *Server) void {
         self.stop();
+
+        // Wait for all active connections to finish (graceful shutdown)
+        self.shutdown_wg.wait();
 
         // Clean up handlers
         var handler_iter = self.handlers.iterator();
@@ -133,13 +175,18 @@ pub const Server = struct {
             self.allocator.destroy(conn);
         }
         self.active_connections.deinit(self.allocator);
+
+        // Clean up zsync resources (executor owns runtime)
+        if (self.executor) |*exec| {
+            exec.deinit();
+        }
     }
 
     pub fn bind(self: *Server, bind_address: []const u8, tls_config: ?*const TlsConfig) Error!void {
         self.listener = self.transport.listen(self.allocator, bind_address, tls_config) catch |err| {
             return switch (err) {
                 TransportError.InvalidArgument => Error.InvalidArgument,
-                TransportError.ResourceExhausted => Error.TooManyRequests,
+                TransportError.ResourceExhausted => Error.ResourceExhausted,
                 else => Error.TransportError,
             };
         };
@@ -153,9 +200,12 @@ pub const Server = struct {
     pub fn serve(self: *Server) Error!void {
         if (self.listener == null) return Error.InvalidState;
 
-        self.is_running = true;
+        self.is_running.store(true, .release);
 
-        while (self.is_running) {
+        // If zsync runtime is available, use async connection handling
+        const use_async = self.executor != null and self.runtime != null;
+
+        while (self.is_running.load(.acquire)) {
             // Accept new connection
             const connection = self.listener.?.accept() catch |err| {
                 switch (err) {
@@ -164,6 +214,15 @@ pub const Server = struct {
                     else => return Error.TransportError,
                 }
             };
+
+            // Rate limiting (if enabled)
+            if (self.rate_limiter) |*limiter| {
+                if (!limiter.tryConsume(1)) {
+                    std.debug.print("[Server] Rate limit exceeded, rejecting connection\n", .{});
+                    connection.close();
+                    continue;
+                }
+            }
 
             // Create active connection
             const active_conn = try self.allocator.create(ActiveConnection);
@@ -174,16 +233,54 @@ pub const Server = struct {
 
             try self.active_connections.append(active_conn);
 
-            // Handle connection synchronously for now
-            // TODO: In production, spawn thread or use async I/O
-            self.handleConnection(active_conn) catch |err| {
-                std.debug.print("Error handling connection: {}\n", .{err});
-            };
+            if (use_async) {
+                // Async path: Use zsync executor and semaphore
+                // Wait for semaphore permit (limits concurrent connections)
+                if (self.connection_semaphore) |*sem| {
+                    sem.acquire();
+                }
+
+                // Add to wait group for graceful shutdown
+                self.shutdown_wg.add(1);
+
+                // Spawn async task to handle connection
+                const ConnectionTask = struct {
+                    fn handle(io: zsync.Io) !void {
+                        _ = io;
+                        const conn = active_conn;
+                        defer {
+                            if (conn.server.connection_semaphore) |*sem| {
+                                sem.release();
+                            }
+                            conn.server.shutdown_wg.done();
+                        }
+
+                        conn.server.handleConnection(conn) catch |err| {
+                            std.debug.print("[Server] Error handling connection: {}\n", .{err});
+                        };
+                    }
+                };
+
+                if (self.executor) |*exec| {
+                    _ = exec.spawn(ConnectionTask.handle, .{}) catch |err| {
+                        std.debug.print("[Server] Failed to spawn connection task: {}\n", .{err});
+                        if (self.connection_semaphore) |*sem| {
+                            sem.release();
+                        }
+                        self.shutdown_wg.done();
+                    };
+                }
+            } else {
+                // Synchronous path (backward compatibility)
+                self.handleConnection(active_conn) catch |err| {
+                    std.debug.print("[Server] Error handling connection: {}\n", .{err});
+                };
+            }
         }
     }
 
     pub fn stop(self: *Server) void {
-        self.is_running = false;
+        self.is_running.store(false, .release);
         if (self.listener) |listener| {
             listener.close();
             self.listener = null;
@@ -191,7 +288,7 @@ pub const Server = struct {
     }
 
     fn handleConnection(self: *Server, active_conn: *ActiveConnection) Error!void {
-        while (self.is_running and active_conn.connection.isConnected()) {
+        while (self.is_running.load(.acquire) and active_conn.connection.isConnected()) {
             // Accept new stream on this connection
             const stream = active_conn.connection.openStream() catch |err| {
                 switch (err) {
@@ -203,7 +300,7 @@ pub const Server = struct {
 
             // Handle stream
             self.handleStream(stream) catch |err| {
-                std.debug.print("Error handling stream: {}\n", .{err});
+                std.debug.print("[Server] Error handling stream: {}\n", .{err});
                 stream.close();
             };
         }
@@ -435,5 +532,5 @@ test "server basic functionality" {
     var server = Server.init(std.testing.allocator, .{ .transport = transport });
     defer server.deinit();
 
-    try std.testing.expect(!server.is_running);
+    try std.testing.expect(!server.is_running.load(.acquire));
 }

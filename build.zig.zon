@@ -38,11 +38,11 @@
         },
         .zlog = .{
             .url = "https://github.com/ghostkellz/zlog/archive/refs/heads/main.tar.gz",
-            .hash = "zlog-0.1.0-kS0sWE9cCAC4TsztkA-l0QEYu3eUKXrHnHux5eDvs04J",
+            .hash = "zlog-0.1.0-kS0sWERcCAD4GivJW2gmFSr5XTSvs9go-5-9zZng-RjR",
         },
         .zpack = .{
-            .url = "https://github.com/ghostkellz/zpack/archive/main.tar.gz",
-            .hash = "zpack-0.3.1-_6t6JiJyCADTO5ML38WZplOy03eTSDnGcfxLEk6aftW5",
+            .url = "https://github.com/ghostkellz/zpack/archive/refs/heads/main.tar.gz",
+            .hash = "zpack-0.3.1-_6t6Ji1yCAAyyKPkvMBU9q7ZcgGwBqVwJ4tTQGCXWcO8",
         },
         .zdoc = .{
             .url = "https://github.com/ghostkellz/zdoc/archive/refs/heads/main.tar.gz",

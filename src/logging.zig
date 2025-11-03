@@ -30,11 +30,11 @@ pub const RpcLogger = struct {
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator, config: zlog.LoggerConfig) !RpcLogger {
-        var logger = try allocator.create(zlog.Logger);
-        logger.* = try zlog.Logger.init(allocator, config);
+        const logger_ptr = try allocator.create(zlog.Logger);
+        logger_ptr.* = try zlog.Logger.init(allocator, config);
 
         return RpcLogger{
-            .logger = logger,
+            .logger = logger_ptr,
             .allocator = allocator,
         };
     }
@@ -68,7 +68,7 @@ pub const RpcLogger = struct {
     }
 
     /// Log RPC call error
-    pub fn logRpcError(self: *RpcLogger, ctx: RequestContext, err: anyerror, duration_us: i64) void {
+    pub fn logRpcError(self: *RpcLogger, ctx: RequestContext, error_value: anyerror, duration_us: i64) void {
         var field_list = std.ArrayList(zlog.Field).init(self.allocator);
         defer field_list.deinit();
 
@@ -78,7 +78,7 @@ pub const RpcLogger = struct {
         field_list.appendSlice(base_fields) catch return;
         field_list.append(.{ .key = "duration_us", .value = .{ .int = duration_us } }) catch return;
         field_list.append(.{ .key = "status", .value = .{ .string = "error" } }) catch return;
-        field_list.append(.{ .key = "error", .value = .{ .string = @errorName(err) } }) catch return;
+        field_list.append(.{ .key = "error", .value = .{ .string = @errorName(error_value) } }) catch return;
 
         self.logger.logWithFields(.err, "RPC call failed", field_list.items);
     }
@@ -164,7 +164,7 @@ pub fn generateRequestId(allocator: std.mem.Allocator) ![]u8 {
     var buf: [16]u8 = undefined;
     std.crypto.random.bytes(&buf);
 
-    return std.fmt.allocPrint(allocator, "{x}", .{std.fmt.fmtSliceHexLower(&buf)});
+    return std.fmt.allocPrint(allocator, "{s}", .{std.fmt.bytesToHex(&buf, .lower)});
 }
 
 /// Sensitive data redaction

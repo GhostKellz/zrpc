@@ -4,7 +4,7 @@
   # zRPC
 
   [![Version](https://img.shields.io/badge/Version-0.1.0-brightgreen.svg)](RELEASE_NOTES.md)
-  [![Status](https://img.shields.io/badge/Status-Stable-blue.svg)](TODO.md)
+    [![Status](https://img.shields.io/badge/Status-Alpha-blue.svg)](TODO.md)
   [![Made with Zig](https://img.shields.io/badge/Made%20with-Zig-yellow.svg)](https://ziglang.org/)
   [![Zig 0.16.0-dev](https://img.shields.io/badge/Zig-0.16.0--dev-orange.svg)](https://ziglang.org/download/)
   [![QUIC](https://img.shields.io/badge/QUIC-RFC%209000-blue.svg)](https://tools.ietf.org/html/rfc9000)
@@ -16,17 +16,19 @@
 
 **Transport-agnostic RPC framework for Zig.** A modular, pluggable architecture with a lean core and transport adapters for QUIC, HTTP/2, and custom protocols.
 
+> ⚠️ **Alpha status:** The transport-agnostic core and QUIC adapter are available today. HTTP/2, HTTP/3, WebSocket, compression, and observability integrations are actively being built and are not production-ready yet.
+
 ## ✨ Features
 
 ### 🏗️ **Modular Architecture**
 - **Transport-Agnostic Core**: Clean separation between RPC logic and transport layer
-- **Pluggable Adapters**: QUIC, HTTP/2, or custom transport implementations
+- **Pluggable Adapters**: QUIC adapter ships today; HTTP/2, HTTP/3, and WebSocket adapters are under active development
 - **Explicit Injection**: No magic URL detection - explicit transport configuration
 
-### 🚀 **Complete RPC Support**
-- **All RPC Types**: Unary, client-streaming, server-streaming, and bidirectional streaming
-- **Standard Protocol**: gRPC-compatible message framing and headers
-- **Protocol Buffers**: Full protobuf v3 support with optional JSON codec for debugging
+### 🚀 **RPC Support (Current Alpha)**
+- **Unary Calls**: Stable request/response flow over QUIC
+- **Streaming APIs**: Server/client/bidirectional streaming scaffolding exists but is not production-ready yet
+- **Protocol Buffers**: Alpha-quality protobuf v3 support with optional JSON codec for debugging
 
 ### 🔧 **Developer Experience**
 - **Minimal Dependencies**: Core has zero transport dependencies
@@ -40,10 +42,10 @@
 - **Advanced Features**: Connection migration, path validation, load balancing
 
 ### 🔒 **Security & Observability**
-- **TLS 1.3**: Transport adapters handle encryption and certificate validation
-- **Authentication**: JWT/OAuth2 token building (verification in optional packages)
-- **Metrics**: Prometheus counters for calls, latency buckets *(coming soon)*
-- **Compression**: Optional zstd per-message compression *(coming soon)*
+- **TLS 1.3**: QUIC transport stubs for TLS exist; full validation is work-in-progress
+- **Authentication**: JWT/OAuth2 helpers for header construction (verification packages planned)
+- **Metrics**: Prometheus counters and OpenTelemetry tracing modules are available but not yet wired into the core runtime
+- **Compression**: LZ77 middleware prototypes exist and require integration & validation
 
 ## 🏗️ Architecture
 
@@ -62,12 +64,12 @@ zrpc-ecosystem/
 │   ├── Connection migration & path validation
 │   └── Advanced QUIC features    # Multiplexing, flow control
 │
-├── zrpc-transport-http2/         # HTTP/2 transport adapter (planned)
-│   ├── HTTP/2 connection adapter
-│   ├── TLS 1.3 support
-│   └── Connection multiplexing
+├── zrpc-transport-http2/         # HTTP/2 transport adapter (prototype)
+│   ├── HTTP/2 connection adapter  # Framing helpers pending SPI migration
+│   ├── TLS 1.3 support            # Planned
+│   └── Connection multiplexing    # Planned
 │
-└── zrpc-tools/                   # Developer utilities
+└── zrpc-tools/                   # Developer utilities (early alpha)
     ├── Proto parser & codegen    # .proto → Zig code generation
     ├── CLI utilities            # `zrpc run --quic ...`
     ├── Contract test harness    # Transport adapter validation
@@ -179,29 +181,19 @@ defer allocator.free(response);
 std.debug.print("Response: {s}\n", .{response});
 ```
 
-## 🔧 Building & Testing
+### 🔧 **Building & Testing**
 
 ```bash
-# Build modular architecture
+# Build the library and install artifacts into zig-out/
 zig build
 
-# Run core tests (no transport dependencies)
-zig build test-core
+# Run the current test suite (core + examples)
+zig build test
 
-# Run adapter tests with real QUIC
-zig build test-quic
-
-# Run contract tests (core ↔ adapter)
-zig build test-contract
-
-# Run ALPHA-1 acceptance tests
+# Optional: exercise additional example targets
 zig build alpha1
-
-# Run micro-benchmarks
+zig build beta
 zig build bench
-
-# Build with specific features
-zig build -Dprotobuf=true -Djson=true -Dquic=true
 ```
 
 ## 📈 Performance
@@ -214,10 +206,10 @@ Built for high performance with transport adapter flexibility:
 - **Frame-Level Control**: Direct control over RPC message framing and flow
 - **Benchmarked**: Contract-tested performance across transport implementations
 
-**BETA Performance Goals** (measured on loopback):
-- Unary RPC (1KB): < 100μs p95 latency
-- Streaming (4KB×100): > 1GB/s throughput
-- Connection setup: < 1ms with 0-RTT
+**Alpha Performance Targets** (under validation):
+- Unary RPC (1KB): < 500μs p95 latency
+- Streaming throughput goals will be published once the streaming APIs stabilize
+- Connection setup: 0-RTT support is planned; current focus is reliable handshake and reconnection
 
 ## 🔐 Security & Layered Architecture
 

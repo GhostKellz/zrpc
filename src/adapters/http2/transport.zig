@@ -1,5 +1,6 @@
 const std = @import("std");
-const transport = @import("../../transport.zig");
+const zrpc_core = @import("zrpc-core");
+const transport = zrpc_core.transport;
 const TransportError = transport.TransportError;
 const Connection = transport.Connection;
 const Stream = transport.Stream;
@@ -412,7 +413,7 @@ const Http2ConnectionAdapter = struct {
 
         std.debug.print("[HTTP/2] Opening stream {d}\n", .{stream_id});
 
-        var stream_adapter = try self.allocator.create(Http2StreamAdapter);
+        const stream_adapter = try self.allocator.create(Http2StreamAdapter);
         stream_adapter.* = Http2StreamAdapter{
             .allocator = self.allocator,
             .connection = self,
@@ -568,7 +569,7 @@ const Http2StreamAdapter = struct {
         const self: *Http2StreamAdapter = @ptrCast(@alignCast(ctx));
 
         // Read HTTP/2 frame
-        const header = FrameHeader.decode(self.connection.socket.reader()) catch |err| {
+        const header = FrameHeader.decode(self.connection.socket.reader()) catch {
             return TransportError.NetworkError;
         };
 
@@ -590,7 +591,7 @@ const Http2StreamAdapter = struct {
             },
             .headers => {
                 // Read and decode headers
-                var headers_data = try self.allocator.alloc(u8, header.length);
+                const headers_data = try self.allocator.alloc(u8, header.length);
                 defer self.allocator.free(headers_data);
 
                 _ = try self.connection.socket.reader().readAll(headers_data);

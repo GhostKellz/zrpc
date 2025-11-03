@@ -106,7 +106,7 @@ pub const Context = struct {
         }
 
         const zpack_config = self.config.level.toZpackLevel().getConfig();
-        var comp = try self.allocator.create(zpack.StreamingCompressor);
+        const comp = try self.allocator.create(zpack.StreamingCompressor);
         comp.* = try zpack.StreamingCompressor.init(self.allocator, zpack_config);
         self.compressor = comp;
         return comp;
@@ -119,7 +119,7 @@ pub const Context = struct {
         }
 
         const window_size = self.config.level.toZpackLevel().getConfig().window_size;
-        var decomp = try self.allocator.create(zpack.StreamingDecompressor);
+        const decomp = try self.allocator.create(zpack.StreamingDecompressor);
         decomp.* = try zpack.StreamingDecompressor.init(self.allocator, window_size);
         self.decompressor = decomp;
         return decomp;
@@ -473,7 +473,7 @@ test "compressed frame encoding/decoding" {
     const encoded = try frame.encode(allocator);
     defer allocator.free(encoded);
 
-    var decoded = try CompressedFrame.decode(allocator, encoded);
+    const decoded = try CompressedFrame.decode(allocator, encoded);
     defer allocator.free(decoded.payload);
 
     try testing.expectEqual(frame.header.algorithm, decoded.header.algorithm);

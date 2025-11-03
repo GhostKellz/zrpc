@@ -12,8 +12,9 @@ const std = @import("std");
 const zrpc_core = @import("zrpc-core");
 const transport_interface = zrpc_core.transport;
 const Error = zrpc_core.Error;
-const metrics = @import("../metrics.zig");
-const tracing = @import("../tracing.zig");
+// Metrics and tracing will be integrated later
+// const metrics = @import("../metrics.zig");
+// const tracing = @import("../tracing.zig");
 
 const Transport = transport_interface.Transport;
 const Connection = transport_interface.Connection;
@@ -23,10 +24,12 @@ const FrameType = transport_interface.FrameType;
 const TransportError = transport_interface.TransportError;
 const TlsConfig = transport_interface.TlsConfig;
 const Listener = transport_interface.Listener;
-const MetricsRegistry = metrics.MetricsRegistry;
-const Tracer = tracing.Tracer;
-const Span = tracing.Span;
-const SpanContext = tracing.SpanContext;
+
+// Stub types until metrics/tracing are integrated
+const MetricsRegistry = opaque {};
+const Tracer = opaque {};
+const Span = opaque {};
+const SpanContext = opaque {};
 
 // WebSocket protocol constants (RFC 6455)
 const WS_MAGIC_STRING = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -147,14 +150,16 @@ pub const WebSocketTransportAdapter = struct {
             registry.recordTransportConnect();
         }
 
-        // Start connection span
-        if (self.tracer) |t| {
-            const span = try t.startSpan("websocket.connect", .client);
-            try span.setAttribute("transport.protocol", .{ .string = "websocket" });
-            try span.setAttribute("net.peer.name", .{ .string = parsed.host });
-            try span.setAttribute("net.peer.port", .{ .int = parsed.port });
-            adapter_conn.connection_span = span;
-        }
+        // Start connection span (disabled until tracing integration)
+        // if (self.tracer) |t| {
+        //     const span = try t.startSpan("websocket.connect", .client);
+        //     try span.setAttribute("transport.protocol", .{ .string = "websocket" });
+        //     try span.setAttribute("net.peer.name", .{ .string = parsed.host });
+        //     try span.setAttribute("net.peer.port", .{ .int = parsed.port });
+        //     adapter_conn.connection_span = span;
+        // }
+        _ = self.tracer;
+        adapter_conn.connection_span = null;
 
         // Perform WebSocket handshake
         adapter_conn.performHandshake(parsed.host, parsed.path) catch |err| {
@@ -286,8 +291,8 @@ const WebSocketConnectionAdapter = struct {
         const key_encoded = std.base64.standard.Encoder.encode(&key_base64, &key_bytes);
 
         // Build HTTP upgrade request
-        var request = std.ArrayList(u8).init(self.allocator);
-        defer request.deinit();
+        var request: std.ArrayList(u8) = .empty;
+        defer request.deinit(self.allocator);
 
         try request.writer().print(
             "GET {s} HTTP/1.1\r\n" ++
@@ -346,10 +351,11 @@ const WebSocketConnectionAdapter = struct {
         self.is_upgraded = true;
         std.log.info("WebSocket: Handshake successful", .{});
 
-        // Add handshake event to span
-        if (self.connection_span) |span| {
-            span.addEvent("handshake.completed", &[_]tracing.Attribute{}) catch {};
-        }
+        // Add handshake event to span (disabled until tracing integration)
+        // if (self.connection_span) |span| {
+        //     span.addEvent("handshake.completed", &[_]tracing.Attribute{}) catch {};
+        // }
+        _ = self.connection_span;
     }
 
     fn openStream(ptr: *anyopaque) TransportError!Stream {
@@ -367,7 +373,7 @@ const WebSocketConnectionAdapter = struct {
             .connection = self,
             .allocator = self.allocator,
             .stream_id = self.next_stream_id,
-            .frame_buffer = std.ArrayList(u8).init(self.allocator),
+            .frame_buffer = .empty,
             .stream_span = null,
         };
 
@@ -380,14 +386,15 @@ const WebSocketConnectionAdapter = struct {
             registry.recordStreamOpen();
         }
 
-        // Create child span for stream
-        if (self.connection_span) |parent_span| {
-            if (self.tracer) |t| {
-                const span = try t.startChildSpan("websocket.stream", .client, parent_span.context);
-                try span.setAttribute("stream.id", .{ .int = @intCast(adapter_stream.stream_id) });
-                adapter_stream.stream_span = span;
-            }
-        }
+        // Create child span for stream (disabled until tracing integration)
+        // if (self.connection_span) |parent_span| {
+        //     if (self.tracer) |t| {
+        //         const span = try t.startChildSpan("websocket.stream", .client, parent_span.context);
+        //         try span.setAttribute("stream.id", .{ .int = @intCast(adapter_stream.stream_id) });
+        //         adapter_stream.stream_span = span;
+        //     }
+        // }
+        adapter_stream.stream_span = null;
 
         std.log.debug("WebSocket: Stream {d} created successfully", .{adapter_stream.stream_id});
 
@@ -424,7 +431,7 @@ const WebSocketConnectionAdapter = struct {
             if (self.metrics_registry) |registry| {
                 registry.recordStreamClose();
             }
-            entry.value_ptr.*.frame_buffer.deinit();
+            entry.value_ptr.*.frame_buffer.deinit(self.allocator);
             self.allocator.destroy(entry.value_ptr.*);
         }
         self.streams.deinit();
@@ -496,7 +503,7 @@ const WebSocketStreamAdapter = struct {
     frame_buffer: std.ArrayList(u8),
     stream_span: ?*Span,
 
-    fn writeFrame(ptr: *anyopaque, frame_type: FrameType, flags: u8, data: []const u8) TransportError!void {
+    fn writeFrame(ptr: *anyopaque, _: FrameType, flags: u8, data: []const u8) TransportError!void {
         const self: *WebSocketStreamAdapter = @ptrCast(@alignCast(ptr));
 
         // Map RPC frame to WebSocket frame
@@ -505,14 +512,14 @@ const WebSocketStreamAdapter = struct {
     }
 
     fn sendWebSocketFrame(self: *WebSocketStreamAdapter, opcode: Opcode, payload: []const u8, fin: bool) !void {
-        var frame = std.ArrayList(u8).init(self.allocator);
-        defer frame.deinit();
+        var frame: std.ArrayList(u8) = .empty;
+        defer frame.deinit(self.allocator);
 
         // Byte 0: FIN + RSV + Opcode
         var byte0: u8 = @intFromEnum(opcode);
         if (fin) byte0 |= 0x80; // Set FIN bit
 
-        try frame.append(byte0);
+        try frame.append(self.allocator, byte0);
 
         // Byte 1: MASK + Payload length
         var byte1: u8 = 0;
@@ -520,15 +527,15 @@ const WebSocketStreamAdapter = struct {
 
         if (payload.len < 126) {
             byte1 |= @intCast(payload.len);
-            try frame.append(byte1);
+            try frame.append(self.allocator, byte1);
         } else if (payload.len < 65536) {
             byte1 |= 126;
-            try frame.append(byte1);
+            try frame.append(self.allocator, byte1);
             try frame.append(@intCast((payload.len >> 8) & 0xFF));
             try frame.append(@intCast(payload.len & 0xFF));
         } else {
             byte1 |= 127;
-            try frame.append(byte1);
+            try frame.append(self.allocator, byte1);
             // 64-bit length
             var i: u3 = 0;
             while (i < 8) : (i += 1) {
@@ -679,7 +686,7 @@ const WebSocketStreamAdapter = struct {
             }
         }
 
-        self.frame_buffer.deinit();
+        self.frame_buffer.deinit(self.allocator);
         self.allocator.destroy(self);
     }
 

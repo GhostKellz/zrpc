@@ -74,6 +74,40 @@ pub const protobuf = @import("protobuf.zig");
 // Error handling
 pub const Error = @import("error.zig").Error;
 
+// Metadata and context support
+pub const metadata = @import("metadata.zig");
+pub const Metadata = metadata.Metadata;
+pub const Context = metadata.Context;
+
+// Deadline and timeout handling
+pub const deadline = @import("deadline.zig");
+pub const DeadlineTimer = deadline.DeadlineTimer;
+pub const CallOptions = deadline.CallOptions;
+
+// Health checking and keepalive
+pub const health = @import("health.zig");
+pub const HealthChecker = health.HealthChecker;
+pub const KeepaliveConfig = health.KeepaliveConfig;
+
+// Interceptor middleware
+pub const interceptor = @import("interceptor.zig");
+pub const Interceptor = interceptor.Interceptor;
+pub const InterceptorChain = interceptor.InterceptorChain;
+
+// Circuit breaker for fault tolerance
+pub const circuit_breaker = @import("circuit_breaker.zig");
+pub const CircuitBreakerInterceptor = circuit_breaker.CircuitBreakerInterceptor;
+pub const CircuitBreakerConfig = circuit_breaker.CircuitBreakerConfig;
+pub const CircuitState = circuit_breaker.CircuitState;
+
+// Legacy transport types (for backward compatibility with adapters)
+const old_transport = @import("transport.zig");
+pub const transport_legacy = struct {
+    pub const Message = old_transport.Message;
+    pub const Frame = old_transport.Frame;
+    pub const StreamId = old_transport.StreamId;
+};
+
 // Service definition helpers
 pub const service = @import("service.zig");
 

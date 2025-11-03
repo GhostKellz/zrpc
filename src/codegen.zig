@@ -28,14 +28,14 @@ pub const CodegenOptions = struct {
 pub const CodeGenerator = struct {
     allocator: std.mem.Allocator,
     options: CodegenOptions,
-    output_buffer: std.ArrayList(u8),
+    output_buffer: std.ArrayListUnmanaged(u8),
     indent_level: u32,
 
     pub fn init(allocator: std.mem.Allocator, options: CodegenOptions) CodeGenerator {
         return CodeGenerator{
             .allocator = allocator,
             .options = options,
-            .output_buffer = std.ArrayList(u8){},
+            .output_buffer = .{},
             .indent_level = 0,
         };
     }
@@ -554,8 +554,9 @@ pub const CodeGenerator = struct {
 
     fn writef(self: *CodeGenerator, comptime fmt: []const u8, args: anytype) !void {
         try self.writeIndent();
-        var writer = std.Io.Writer.fromArrayList(&self.output_buffer);
-        try writer.print(fmt, args);
+        const line = try std.fmt.allocPrint(self.allocator, fmt, args);
+        defer self.allocator.free(line);
+        try self.output_buffer.appendSlice(self.allocator, line);
         try self.output_buffer.append(self.allocator, '\n');
     }
 
@@ -573,7 +574,8 @@ pub fn generateZigCode(allocator: std.mem.Allocator, proto_file: *const proto_pa
     defer generator.deinit();
 
     const result = try generator.generateFromProto(proto_file);
-    return try allocator.dupe(u8, result);
+    // Dupe to return mutable slice
+    return allocator.dupe(u8, result);
 }
 
 pub fn generateFromProtoFile(allocator: std.mem.Allocator, proto_path: []const u8, options: CodegenOptions) ![]u8 {

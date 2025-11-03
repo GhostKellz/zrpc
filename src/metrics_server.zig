@@ -36,7 +36,7 @@ pub const MetricsServer = struct {
         }
 
         // Create TCP server
-        var server = try self.bind_address.listen(.{
+        const server = try self.bind_address.listen(.{
             .reuse_address = true,
         });
         self.server = server;
@@ -99,7 +99,7 @@ pub const MetricsServer = struct {
         const request = buffer[0..bytes_read];
 
         // Parse request line
-        var line_iter = std.mem.split(u8, request, "\r\n");
+        var line_iter = std.mem.splitSequence(u8, request, "\r\n");
         const request_line = line_iter.next() orelse return error.InvalidRequest;
 
         // Check if it's a GET request to /metrics
@@ -152,7 +152,6 @@ pub const MetricsServer = struct {
     }
 
     fn serveIndex(self: *MetricsServer, stream: std.net.Stream) !void {
-        _ = self;
         const html =
             \\<!DOCTYPE html>
             \\<html>
@@ -225,7 +224,7 @@ test "metrics server start and stop" {
     try testing.expect(server.is_running.load(.acquire));
 
     // Give it a moment to start
-    std.time.sleep(10 * std.time.ns_per_ms);
+    std.Thread.sleep(10 * std.time.ns_per_ms);
 
     server.stop();
     try testing.expect(!server.is_running.load(.acquire));
@@ -250,7 +249,7 @@ test "metrics endpoint" {
     defer server.stop();
 
     // Give server time to start
-    std.time.sleep(10 * std.time.ns_per_ms);
+    std.Thread.sleep(10 * std.time.ns_per_ms);
 
     // Connect and fetch metrics
     const address = std.net.Address.initIp4([_]u8{ 127, 0, 0, 1 }, 9092);

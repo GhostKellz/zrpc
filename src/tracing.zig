@@ -100,7 +100,7 @@ pub const SpanContext = struct {
     /// Parse W3C traceparent header
     pub fn fromTraceparent(traceparent: []const u8) !SpanContext {
         // Format: 00-<trace-id>-<span-id>-<trace-flags>
-        var parts = std.mem.split(u8, traceparent, "-");
+        var parts = std.mem.splitSequence(u8, traceparent, "-");
 
         const version = parts.next() orelse return error.InvalidTraceparent;
         if (!std.mem.eql(u8, version, "00")) return error.UnsupportedVersion;
@@ -185,12 +185,12 @@ pub const Span = struct {
             .parent_span_id = parent_span_id,
             .name = try allocator.dupe(u8, name),
             .kind = kind,
-            .start_time = std.time.nanoTimestamp(),
+            .start_time = @intCast(std.time.nanoTimestamp()),
             .end_time = null,
             .status = .unset,
             .status_message = null,
-            .attributes = std.ArrayList(Attribute).init(allocator),
-            .events = std.ArrayList(SpanEvent).init(allocator),
+            .attributes = .empty,
+            .events = .empty,
             .allocator = allocator,
         };
     }
@@ -205,7 +205,7 @@ pub const Span = struct {
                 else => {},
             }
         }
-        self.attributes.deinit();
+        self.attributes.deinit(self.allocator);
 
         for (self.events.items) |event| {
             self.allocator.free(event.name);
@@ -218,7 +218,7 @@ pub const Span = struct {
             }
             self.allocator.free(event.attributes);
         }
-        self.events.deinit();
+        self.events.deinit(self.allocator);
 
         if (self.status_message) |msg| {
             self.allocator.free(msg);
@@ -235,7 +235,7 @@ pub const Span = struct {
             .bool => |b| AttributeValue{ .bool = b },
         };
 
-        try self.attributes.append(.{
+        try self.attributes.append(self.allocator, .{
             .key = key_copy,
             .value = value_copy,
         });
@@ -247,20 +247,20 @@ pub const Span = struct {
 
         // Copy attributes
         const attrs_copy = try self.allocator.alloc(Attribute, attributes.len);
-        for (attributes, 0..) |attr, i| {
+        for (attributes, 0..) |attr, attr_idx| {
             const key_copy = try self.allocator.dupe(u8, attr.key);
             const value_copy = switch (attr.value) {
                 .string => |s| AttributeValue{ .string = try self.allocator.dupe(u8, s) },
-                .int => |i| AttributeValue{ .int = i },
+                .int => |int_val| AttributeValue{ .int = int_val },
                 .double => |d| AttributeValue{ .double = d },
                 .bool => |b| AttributeValue{ .bool = b },
             };
-            attrs_copy[i] = .{ .key = key_copy, .value = value_copy };
+            attrs_copy[attr_idx] = .{ .key = key_copy, .value = value_copy };
         }
 
-        try self.events.append(.{
+        try self.events.append(self.allocator, .{
             .name = name_copy,
-            .timestamp = std.time.nanoTimestamp(),
+            .timestamp = @intCast(std.time.nanoTimestamp()),
             .attributes = attrs_copy,
         });
     }
@@ -276,14 +276,14 @@ pub const Span = struct {
     /// End span
     pub fn end(self: *Span) void {
         if (self.end_time == null) {
-            self.end_time = std.time.nanoTimestamp();
+            self.end_time = @intCast(std.time.nanoTimestamp());
         }
     }
 
     /// Get span duration in microseconds
     pub fn durationMicros(self: *Span) ?i64 {
-        const end = self.end_time orelse return null;
-        return @divTrunc(end - self.start_time, 1000);
+        const end_timestamp = self.end_time orelse return null;
+        return @divTrunc(end_timestamp - self.start_time, 1000);
     }
 };
 
@@ -299,8 +299,8 @@ pub const Tracer = struct {
         return .{
             .allocator = allocator,
             .service_name = try allocator.dupe(u8, service_name),
-            .active_spans = std.ArrayList(*Span).init(allocator),
-            .completed_spans = std.ArrayList(Span).init(allocator),
+            .active_spans = .empty,
+            .completed_spans = .empty,
             .mutex = .{},
         };
     }
@@ -312,12 +312,12 @@ pub const Tracer = struct {
             span.deinit();
             self.allocator.destroy(span);
         }
-        self.active_spans.deinit();
+        self.active_spans.deinit(self.allocator);
 
         for (self.completed_spans.items) |*span| {
             span.deinit();
         }
-        self.completed_spans.deinit();
+        self.completed_spans.deinit(self.allocator);
     }
 
     /// Start a new root span
@@ -360,7 +360,7 @@ pub const Tracer = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        try self.active_spans.append(span);
+        try self.active_spans.append(self.allocator, span);
 
         return span;
     }
@@ -381,7 +381,7 @@ pub const Tracer = struct {
         }
 
         // Move to completed spans
-        try self.completed_spans.append(span.*);
+        try self.completed_spans.append(self.allocator, span.*);
         self.allocator.destroy(span);
     }
 
@@ -425,7 +425,7 @@ pub const OtlpExporter = struct {
         if (spans.len == 0) return;
 
         // Build JSON payload
-        var json = std.ArrayList(u8).init(self.allocator);
+        var json: std.ArrayList(u8) = .init(self.allocator);
         defer json.deinit();
 
         try self.buildOtlpJson(&json, spans);
@@ -510,7 +510,7 @@ pub const OtlpExporter = struct {
         defer conn.close();
 
         // Build HTTP request
-        var request = std.ArrayList(u8).init(self.allocator);
+        var request: std.ArrayList(u8) = .init(self.allocator);
         defer request.deinit();
 
         try request.writer().print(

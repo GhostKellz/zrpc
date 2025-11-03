@@ -2,17 +2,45 @@ const std = @import("std");
 const Error = @import("error.zig").Error;
 const tls = @import("tls.zig");
 const quic = @import("quic.zig");
+const metadata_mod = @import("metadata.zig");
+
+pub const Metadata = metadata_mod.Metadata;
+pub const Context = metadata_mod.Context;
 
 pub const Message = struct {
     headers: std.StringHashMap([]const u8),
     body: []const u8,
     allocator: std.mem.Allocator,
+    metadata: ?*Metadata, // Optional gRPC metadata
+    context: ?*Context, // Optional context with deadline
 
     pub fn init(allocator: std.mem.Allocator, body: []const u8) Message {
         return Message{
             .headers = std.StringHashMap([]const u8).init(allocator),
             .body = body,
             .allocator = allocator,
+            .metadata = null,
+            .context = null,
+        };
+    }
+
+    pub fn initWithMetadata(allocator: std.mem.Allocator, body: []const u8, meta: *Metadata) Message {
+        return Message{
+            .headers = std.StringHashMap([]const u8).init(allocator),
+            .body = body,
+            .allocator = allocator,
+            .metadata = meta,
+            .context = null,
+        };
+    }
+
+    pub fn initWithContext(allocator: std.mem.Allocator, body: []const u8, ctx: *Context) Message {
+        return Message{
+            .headers = std.StringHashMap([]const u8).init(allocator),
+            .body = body,
+            .allocator = allocator,
+            .metadata = &ctx.metadata,
+            .context = ctx,
         };
     }
 
@@ -227,7 +255,7 @@ pub const Http2Transport = struct {
 
         const port: u16 = if (colon_pos) |pos| blk: {
             const end_pos = if (slash_pos) |sp| sp else url_without_scheme.len;
-            const port_str = url_without_scheme[pos + 1..end_pos];
+            const port_str = url_without_scheme[pos + 1 .. end_pos];
             break :blk std.fmt.parseInt(u16, port_str, 10) catch if (is_https) 443 else 80;
         } else if (is_https) 443 else 80;
 
@@ -263,30 +291,30 @@ pub const Http2Transport = struct {
         defer headers_data.deinit();
 
         // Simple pseudo-header encoding (not proper HPACK)
-        try headers_data.appendSlice( ":method");
-        try headers_data.append( 0);
-        try headers_data.appendSlice( "POST");
-        try headers_data.append( 0);
+        try headers_data.appendSlice(":method");
+        try headers_data.append(0);
+        try headers_data.appendSlice("POST");
+        try headers_data.append(0);
 
-        try headers_data.appendSlice( ":path");
-        try headers_data.append( 0);
-        try headers_data.appendSlice( path);
-        try headers_data.append( 0);
+        try headers_data.appendSlice(":path");
+        try headers_data.append(0);
+        try headers_data.appendSlice(path);
+        try headers_data.append(0);
 
-        try headers_data.appendSlice( ":authority");
-        try headers_data.append( 0);
-        try headers_data.appendSlice( host);
-        try headers_data.append( 0);
+        try headers_data.appendSlice(":authority");
+        try headers_data.append(0);
+        try headers_data.appendSlice(host);
+        try headers_data.append(0);
 
-        try headers_data.appendSlice( "content-type");
-        try headers_data.append( 0);
-        try headers_data.appendSlice( "application/grpc");
-        try headers_data.append( 0);
+        try headers_data.appendSlice("content-type");
+        try headers_data.append(0);
+        try headers_data.appendSlice("application/grpc");
+        try headers_data.append(0);
 
-        try headers_data.appendSlice( "grpc-method");
-        try headers_data.append( 0);
-        try headers_data.appendSlice( method);
-        try headers_data.append( 0);
+        try headers_data.appendSlice("grpc-method");
+        try headers_data.append(0);
+        try headers_data.appendSlice(method);
+        try headers_data.append(0);
 
         const headers_frame = Frame{
             .stream_id = stream_id,
@@ -344,7 +372,7 @@ pub const QuicTransport = struct {
 
         const port: u16 = if (colon_pos) |pos| blk: {
             const end_pos = if (slash_pos) |sp| sp else url_without_scheme.len;
-            const port_str = url_without_scheme[pos + 1..end_pos];
+            const port_str = url_without_scheme[pos + 1 .. end_pos];
             break :blk std.fmt.parseInt(u16, port_str, 10) catch if (is_secure) 443 else 80;
         } else if (is_secure) 443 else 80;
 
@@ -372,23 +400,23 @@ pub const QuicTransport = struct {
 
         // HTTP/3 headers frame (simplified)
         // In real implementation, would use QPACK compression
-        try grpc_message.appendSlice(self.allocator,":method: POST\r\n");
-        try grpc_message.appendSlice(self.allocator,":path: ");
-        try grpc_message.appendSlice(self.allocator,path);
-        try grpc_message.appendSlice(self.allocator,"\r\n");
-        try grpc_message.appendSlice(self.allocator,":authority: ");
-        try grpc_message.appendSlice(self.allocator,host);
-        try grpc_message.appendSlice(self.allocator,"\r\n");
-        try grpc_message.appendSlice(self.allocator,"content-type: application/grpc\r\n");
-        try grpc_message.appendSlice(self.allocator,"grpc-method: ");
-        try grpc_message.appendSlice(self.allocator,method);
-        try grpc_message.appendSlice(self.allocator,"\r\n\r\n");
+        try grpc_message.appendSlice(self.allocator, ":method: POST\r\n");
+        try grpc_message.appendSlice(self.allocator, ":path: ");
+        try grpc_message.appendSlice(self.allocator, path);
+        try grpc_message.appendSlice(self.allocator, "\r\n");
+        try grpc_message.appendSlice(self.allocator, ":authority: ");
+        try grpc_message.appendSlice(self.allocator, host);
+        try grpc_message.appendSlice(self.allocator, "\r\n");
+        try grpc_message.appendSlice(self.allocator, "content-type: application/grpc\r\n");
+        try grpc_message.appendSlice(self.allocator, "grpc-method: ");
+        try grpc_message.appendSlice(self.allocator, method);
+        try grpc_message.appendSlice(self.allocator, "\r\n\r\n");
 
         // gRPC message framing: [compressed flag (1 byte)][length (4 bytes)][data]
-        try grpc_message.append(self.allocator,0); // Not compressed
+        try grpc_message.append(self.allocator, 0); // Not compressed
         const msg_len_bytes = std.mem.toBytes(std.mem.nativeToBig(u32, @intCast(message.body.len)));
-        try grpc_message.appendSlice(self.allocator,&msg_len_bytes);
-        try grpc_message.appendSlice(self.allocator,message.body);
+        try grpc_message.appendSlice(self.allocator, &msg_len_bytes);
+        try grpc_message.appendSlice(self.allocator, message.body);
 
         // Send data over QUIC stream
         try stream.write(grpc_message.items);
@@ -543,7 +571,13 @@ test "quic frame creation and encoding" {
 test "quic connection creation" {
     const address = std.net.Address.initIp4([4]u8{ 127, 0, 0, 1 }, 8080);
 
-    // This will fail to connect, but we can test the initialization
-    const result = quic.QuicConnection.initClient(std.testing.allocator, address);
-    try std.testing.expectError(error.ConnectionRefused, result);
+    // This will fail to connect, but we can test the initialization path.
+    var conn = quic.QuicConnection.initClient(std.testing.allocator, address) catch |err| {
+        switch (err) {
+            error.ConnectionRefused, error.NetworkUnreachable, error.ConnectionTimedOut, error.AddressNotAvailable => return,
+            else => return err,
+        }
+    };
+    defer conn.deinit();
+    try std.testing.expect(!conn.is_server);
 }

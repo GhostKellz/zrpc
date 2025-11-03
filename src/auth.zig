@@ -3,29 +3,108 @@
 const std = @import("std");
 const Error = @import("error.zig").Error;
 
+fn jsonAppendComma(buffer: *std.ArrayList(u8), allocator: std.mem.Allocator, first: *bool) !void {
+    if (first.*) {
+        first.* = false;
+    } else {
+        try buffer.append(allocator, ',');
+    }
+}
+
+fn jsonAppendEscaped(buffer: *std.ArrayList(u8), allocator: std.mem.Allocator, value: []const u8) !void {
+    for (value) |c| {
+        switch (c) {
+            '"' => try buffer.appendSlice(allocator, "\\\""),
+            '\\' => try buffer.appendSlice(allocator, "\\\\"),
+            '\n' => try buffer.appendSlice(allocator, "\\n"),
+            '\r' => try buffer.appendSlice(allocator, "\\r"),
+            '\t' => try buffer.appendSlice(allocator, "\\t"),
+            else => try buffer.append(allocator, c),
+        }
+    }
+}
+
+fn jsonAppendStringLiteral(buffer: *std.ArrayList(u8), allocator: std.mem.Allocator, value: []const u8) !void {
+    try buffer.append(allocator, '"');
+    try jsonAppendEscaped(buffer, allocator, value);
+    try buffer.append(allocator, '"');
+}
+
+fn jsonAppendStringField(buffer: *std.ArrayList(u8), allocator: std.mem.Allocator, key: []const u8, value: []const u8, first: *bool) !void {
+    try jsonAppendComma(buffer, allocator, first);
+    try jsonAppendStringLiteral(buffer, allocator, key);
+    try buffer.append(allocator, ':');
+    try jsonAppendStringLiteral(buffer, allocator, value);
+}
+
+fn jsonAppendIntField(buffer: *std.ArrayList(u8), allocator: std.mem.Allocator, key: []const u8, value: i64, first: *bool) !void {
+    try jsonAppendComma(buffer, allocator, first);
+    try jsonAppendStringLiteral(buffer, allocator, key);
+    try buffer.append(allocator, ':');
+
+    var temp: [32]u8 = undefined;
+    const written = try std.fmt.bufPrint(temp[0..], "{d}", .{value});
+    try buffer.appendSlice(allocator, written);
+}
+
+fn jsonAppendStringArrayField(buffer: *std.ArrayList(u8), allocator: std.mem.Allocator, key: []const u8, values: []const []const u8, first: *bool) !void {
+    try jsonAppendComma(buffer, allocator, first);
+    try jsonAppendStringLiteral(buffer, allocator, key);
+    try buffer.append(allocator, ':');
+    try buffer.append(allocator, '[');
+
+    var first_value = true;
+    for (values) |val| {
+        if (!first_value) {
+            try buffer.append(allocator, ',');
+        } else {
+            first_value = false;
+        }
+        try jsonAppendStringLiteral(buffer, allocator, val);
+    }
+
+    try buffer.append(allocator, ']');
+}
+
 // JWT Header structure
 pub const JwtHeader = struct {
     alg: []const u8, // Algorithm (HS256, RS256, etc.)
     typ: []const u8, // Type (JWT)
     kid: ?[]const u8 = null, // Key ID
 
-    pub fn encode(self: *const JwtHeader, allocator: std.mem.Allocator) ![]u8 {
-        var json_obj = std.json.ObjectMap.init(allocator);
-        defer json_obj.deinit();
+    pub fn clone(self: *const JwtHeader, allocator: std.mem.Allocator) !JwtHeader {
+        const alg_copy = try allocator.dupe(u8, self.alg);
+        errdefer allocator.free(alg_copy);
 
-        try json_obj.put("alg", std.json.Value{ .string = self.alg });
-        try json_obj.put("typ", std.json.Value{ .string = self.typ });
+        const typ_copy = try allocator.dupe(u8, self.typ);
+        errdefer allocator.free(typ_copy);
 
-        if (self.kid) |kid| {
-            try json_obj.put("kid", std.json.Value{ .string = kid });
+        var kid_copy: ?[]const u8 = null;
+        if (self.kid) |kid_value| {
+            const cloned = try allocator.dupe(u8, kid_value);
+            kid_copy = cloned;
         }
 
+        return JwtHeader{
+            .alg = alg_copy,
+            .typ = typ_copy,
+            .kid = kid_copy,
+        };
+    }
+
+    pub fn encode(self: *const JwtHeader, allocator: std.mem.Allocator) ![]u8 {
         var json_str: std.ArrayList(u8) = .{};
         defer json_str.deinit(allocator);
 
-        var writer = std.Io.Writer.fromArrayList(&json_str);
-        const fmt_value = std.json.fmt(std.json.Value{ .object = json_obj }, .{});
-        try fmt_value.format(&writer);
+        try json_str.append(allocator, '{');
+        var first = true;
+        try jsonAppendStringField(&json_str, allocator, "alg", self.alg, &first);
+        try jsonAppendStringField(&json_str, allocator, "typ", self.typ, &first);
+        if (self.kid) |kid| {
+            try jsonAppendStringField(&json_str, allocator, "kid", kid, &first);
+        }
+        try json_str.append(allocator, '}');
+
         return try base64UrlEncode(allocator, json_str.items);
     }
 
@@ -80,6 +159,51 @@ pub const JwtClaims = struct {
         return JwtClaims{
             .allocator = allocator,
         };
+    }
+
+    pub fn clone(self: *const JwtClaims) !JwtClaims {
+        var cloned = JwtClaims.init(self.allocator);
+
+        if (self.iss) |iss| {
+            cloned.iss = try cloned.allocator.dupe(u8, iss);
+        }
+        if (self.sub) |sub| {
+            cloned.sub = try cloned.allocator.dupe(u8, sub);
+        }
+        if (self.aud) |aud| {
+            cloned.aud = try cloned.allocator.dupe(u8, aud);
+        }
+        if (self.jti) |jti| {
+            cloned.jti = try cloned.allocator.dupe(u8, jti);
+        }
+        if (self.scope) |scope| {
+            cloned.scope = try cloned.allocator.dupe(u8, scope);
+        }
+
+        if (self.permissions) |perms| {
+            var perms_copy = try cloned.allocator.alloc([]const u8, perms.len);
+            var assigned: usize = 0;
+            errdefer {
+                while (assigned > 0) {
+                    assigned -= 1;
+                    cloned.allocator.free(perms_copy[assigned]);
+                }
+                cloned.allocator.free(perms_copy);
+            }
+
+            var idx: usize = 0;
+            while (idx < perms.len) : (idx += 1) {
+                perms_copy[idx] = try cloned.allocator.dupe(u8, perms[idx]);
+                assigned = idx + 1;
+            }
+            cloned.permissions = perms_copy;
+        }
+
+        cloned.exp = self.exp;
+        cloned.nbf = self.nbf;
+        cloned.iat = self.iat;
+
+        return cloned;
     }
 
     pub fn deinit(self: *JwtClaims) void {
@@ -147,24 +271,24 @@ pub const JwtClaims = struct {
     }
 
     pub fn encode(self: *const JwtClaims, allocator: std.mem.Allocator) ![]u8 {
-        var json_obj = std.json.ObjectMap.init(allocator);
-        defer json_obj.deinit();
-
-        if (self.iss) |iss| try json_obj.put("iss", std.json.Value{ .string = iss });
-        if (self.sub) |sub| try json_obj.put("sub", std.json.Value{ .string = sub });
-        if (self.aud) |aud| try json_obj.put("aud", std.json.Value{ .string = aud });
-        if (self.exp) |exp| try json_obj.put("exp", std.json.Value{ .integer = exp });
-        if (self.nbf) |nbf| try json_obj.put("nbf", std.json.Value{ .integer = nbf });
-        if (self.iat) |iat| try json_obj.put("iat", std.json.Value{ .integer = iat });
-        if (self.jti) |jti| try json_obj.put("jti", std.json.Value{ .string = jti });
-        if (self.scope) |scope| try json_obj.put("scope", std.json.Value{ .string = scope });
-
         var json_str: std.ArrayList(u8) = .{};
         defer json_str.deinit(allocator);
 
-        var writer = std.Io.Writer.fromArrayList(&json_str);
-        const fmt_value = std.json.fmt(std.json.Value{ .object = json_obj }, .{});
-        try fmt_value.format(&writer);
+        try json_str.append(allocator, '{');
+        var first = true;
+
+        if (self.iss) |iss| try jsonAppendStringField(&json_str, allocator, "iss", iss, &first);
+        if (self.sub) |sub| try jsonAppendStringField(&json_str, allocator, "sub", sub, &first);
+        if (self.aud) |aud| try jsonAppendStringField(&json_str, allocator, "aud", aud, &first);
+        if (self.exp) |exp| try jsonAppendIntField(&json_str, allocator, "exp", exp, &first);
+        if (self.nbf) |nbf| try jsonAppendIntField(&json_str, allocator, "nbf", nbf, &first);
+        if (self.iat) |iat| try jsonAppendIntField(&json_str, allocator, "iat", iat, &first);
+        if (self.jti) |jti| try jsonAppendStringField(&json_str, allocator, "jti", jti, &first);
+        if (self.scope) |scope| try jsonAppendStringField(&json_str, allocator, "scope", scope, &first);
+        if (self.permissions) |perms| try jsonAppendStringArrayField(&json_str, allocator, "permissions", perms, &first);
+
+        try json_str.append(allocator, '}');
+
         return try base64UrlEncode(allocator, json_str.items);
     }
 };
@@ -176,10 +300,16 @@ pub const JwtToken = struct {
     signature: []u8,
     allocator: std.mem.Allocator,
 
-    pub fn init(allocator: std.mem.Allocator, header: JwtHeader, claims: JwtClaims) JwtToken {
+    pub fn init(allocator: std.mem.Allocator, header: JwtHeader, claims: JwtClaims) !JwtToken {
+        var header_clone = try header.clone(allocator);
+        errdefer header_clone.deinit(allocator);
+
+        var claims_clone = try claims.clone();
+        errdefer claims_clone.deinit();
+
         return JwtToken{
-            .header = header,
-            .claims = claims,
+            .header = header_clone,
+            .claims = claims_clone,
             .signature = &[_]u8{},
             .allocator = allocator,
         };
@@ -404,7 +534,7 @@ pub const AuthMiddleware = struct {
         }
 
         // Return validated claims (caller must deinit)
-        return token.claims;
+        return try token.claims.clone();
     }
 
     pub fn createToken(self: *const AuthMiddleware, subject: []const u8, scope: ?[]const u8, expires_in: i64) ![]u8 {
@@ -415,6 +545,7 @@ pub const AuthMiddleware = struct {
         };
 
         var claims = JwtClaims.init(self.allocator);
+        defer claims.deinit();
         try claims.setIssuer(self.issuer);
         try claims.setSubject(subject);
         try claims.setAudience(self.audience);
@@ -422,7 +553,7 @@ pub const AuthMiddleware = struct {
         claims.setIssuedNow();
         claims.setExpiration(expires_in);
 
-        var token = JwtToken.init(self.allocator, header, claims);
+        var token = try JwtToken.init(self.allocator, header, claims);
         defer token.deinit();
 
         try token.sign(self.secret);
@@ -498,7 +629,7 @@ test "JWT token signing and verification" {
     try claims.setSubject("test-user");
     claims.setExpiration(3600);
 
-    var token = JwtToken.init(std.testing.allocator, header, claims);
+    var token = try JwtToken.init(std.testing.allocator, header, claims);
     defer token.deinit();
 
     try token.sign(secret);
@@ -509,12 +640,7 @@ test "JWT token signing and verification" {
 }
 
 test "auth middleware" {
-    var middleware = try AuthMiddleware.init(
-        std.testing.allocator,
-        "secret-key",
-        "test-issuer",
-        "test-audience"
-    );
+    var middleware = try AuthMiddleware.init(std.testing.allocator, "secret-key", "test-issuer", "test-audience");
     defer middleware.deinit();
 
     const token_str = try middleware.createToken("user123", "read:data", 3600);

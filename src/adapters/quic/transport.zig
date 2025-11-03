@@ -79,16 +79,29 @@ pub const QuicTransportAdapter = struct {
     pub fn listen(self: *QuicTransportAdapter, allocator: std.mem.Allocator, bind_address: []const u8, tls_config: ?*const TlsConfig) TransportError!Listener {
         _ = tls_config; // TODO: Implement TLS config handling
 
-        // Parse bind address
         const parsed = self.parseEndpoint(bind_address) catch return TransportError.InvalidArgument;
-        const address = std.net.Address.initIp4([4]u8{ 127, 0, 0, 1 }, parsed.port);
+        const address = std.net.Address.resolveIp(parsed.host, parsed.port) catch |err| {
+            std.log.err("QUIC: Failed to resolve bind address {s}:{d}: {}", .{ parsed.host, parsed.port, err });
+            return TransportError.InvalidArgument;
+        };
+
+        const server = address.listen(.{ .reuse_address = true }) catch |err| {
+            std.log.err("QUIC: Failed to listen on {s}:{d}: {}", .{ parsed.host, parsed.port, err });
+            return switch (err) {
+                error.AddressInUse => TransportError.ResourceExhausted,
+                error.AccessDenied => TransportError.InvalidArgument,
+                else => TransportError.Protocol,
+            };
+        };
+
+        std.log.info("QUIC: Listening on {any}", .{server.listen_address});
 
         // Create QUIC listener adapter
         const adapter_listener = try allocator.create(QuicListenerAdapter);
         adapter_listener.* = QuicListenerAdapter{
-            .bind_address = address,
             .allocator = allocator,
-            .is_listening = false,
+            .server = server,
+            .listen_address = server.listen_address,
         };
 
         return Listener{
@@ -102,7 +115,7 @@ pub const QuicTransportAdapter = struct {
 
         const colon_pos = std.mem.lastIndexOfScalar(u8, endpoint, ':') orelse return error.InvalidEndpoint;
         const host = endpoint[0..colon_pos];
-        const port_str = endpoint[colon_pos + 1..];
+        const port_str = endpoint[colon_pos + 1 ..];
         const port = std.fmt.parseInt(u16, port_str, 10) catch return error.InvalidEndpoint;
 
         return .{ .host = host, .port = port };
@@ -185,23 +198,54 @@ const QuicConnectionAdapter = struct {
 };
 
 const QuicListenerAdapter = struct {
-    bind_address: std.net.Address,
     allocator: std.mem.Allocator,
-    is_listening: bool,
-    socket: ?std.net.Stream = null,
+    server: std.net.Server,
+    listen_address: std.net.Address,
 
     fn accept(ptr: *anyopaque) TransportError!Connection {
         const self: *QuicListenerAdapter = @ptrCast(@alignCast(ptr));
-        _ = self; // TODO: Implement QUIC server accept
-        return TransportError.Protocol;
+        const conn = self.server.accept() catch |err| {
+            std.log.err("QUIC: Accept failed: {}", .{err});
+            return switch (err) {
+                error.ConnectionAborted, error.ConnectionReset => TransportError.ConnectionReset,
+                error.WouldBlock => TransportError.Temporary,
+                else => TransportError.Protocol,
+            };
+        };
+
+        std.log.info("QUIC: Accepted connection from {any}", .{conn.address});
+
+        var quic_conn = QuicConnection.initServer(self.allocator, conn.stream, conn.address) catch |err| {
+            std.log.err("QUIC: Failed to wrap accepted connection: {}", .{err});
+            return switch (err) {
+                error.OutOfMemory => TransportError.OutOfMemory,
+                else => TransportError.Protocol,
+            };
+        };
+
+        quic_conn.handshake() catch |err| {
+            std.log.err("QUIC: Server handshake failed: {}", .{err});
+            quic_conn.deinit();
+            return TransportError.Protocol;
+        };
+
+        const adapter_conn = try self.allocator.create(QuicConnectionAdapter);
+        adapter_conn.* = QuicConnectionAdapter{
+            .quic_connection = quic_conn,
+            .allocator = self.allocator,
+            .streams = std.AutoHashMap(u64, *QuicStreamAdapter).init(self.allocator),
+            .next_stream_id = 1,
+        };
+
+        return Connection{
+            .ptr = adapter_conn,
+            .vtable = &QuicConnectionAdapter.vtable,
+        };
     }
 
     fn close(ptr: *anyopaque) void {
         const self: *QuicListenerAdapter = @ptrCast(@alignCast(ptr));
-        if (self.socket) |socket| {
-            socket.close();
-        }
-        self.is_listening = false;
+        self.server.deinit();
         self.allocator.destroy(self);
     }
 
@@ -322,4 +366,47 @@ test "QUIC transport adapter creation" {
     const parsed = try adapter.parseEndpoint("localhost:8080");
     try std.testing.expectEqualStrings("localhost", parsed.host);
     try std.testing.expectEqual(@as(u16, 8080), parsed.port);
+}
+
+test "QUIC listener accepts client connection" {
+    const allocator = std.testing.allocator;
+
+    var adapter = QuicTransportAdapter.init(allocator);
+    defer adapter.deinit();
+
+    var port: u16 = 35000;
+    var listener: Listener = undefined;
+    var endpoint_buf: []u8 = &[_]u8{};
+
+    while (true) {
+        const endpoint = try std.fmt.allocPrint(allocator, "127.0.0.1:{d}", .{port});
+        const result = adapter.listen(allocator, endpoint, null) catch |err| {
+            allocator.free(endpoint);
+            if (err == TransportError.ResourceExhausted and port < 60000) {
+                port += 1;
+                continue;
+            }
+            return err;
+        };
+        listener = result;
+        endpoint_buf = endpoint;
+        break;
+    }
+    defer listener.close();
+    defer allocator.free(endpoint_buf);
+
+    const client_conn = try adapter.connect(allocator, endpoint_buf, null);
+    defer client_conn.close();
+
+    const server_conn = try listener.accept();
+    defer server_conn.close();
+
+    try std.testing.expect(client_conn.isConnected());
+    try std.testing.expect(server_conn.isConnected());
+
+    var client_stream = try client_conn.openStream();
+    defer client_stream.close();
+
+    var server_stream = try server_conn.openStream();
+    defer server_stream.close();
 }

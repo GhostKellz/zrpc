@@ -28,7 +28,9 @@ pub fn build(b: *std.Build) void {
 
     // Transport adapter options
     const enable_quic = b.option(bool, "quic", "Enable QUIC transport adapter (default: true)") orelse true;
-    _ = b.option(bool, "http2", "Enable HTTP/2 transport adapter (default: false - not implemented)") orelse false;
+    const enable_http2 = b.option(bool, "http2", "Enable HTTP/2 transport adapter (default: true)") orelse true;
+    const enable_uds = b.option(bool, "uds", "Enable Unix Domain Socket transport adapter (default: true)") orelse true;
+    const enable_websocket = b.option(bool, "websocket", "Enable WebSocket transport adapter (default: true)") orelse true;
 
     // Get zsync dependency for async runtime
     const zsync_dep = b.dependency("zsync", .{
@@ -37,12 +39,28 @@ pub fn build(b: *std.Build) void {
     });
     const zsync_mod = zsync_dep.module("zsync");
 
+    // Get zlog dependency for logging
+    const zlog_dep = b.dependency("zlog", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const zlog_mod = zlog_dep.module("zlog");
+
+    // Get zpack dependency for compression
+    const zpack_dep = b.dependency("zpack", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const zpack_mod = zpack_dep.module("zpack");
+
     // Create zrpc-core module (transport-agnostic)
     const core_mod = b.addModule("zrpc-core", .{
         .root_source_file = b.path("src/core.zig"),
         .target = target,
         .imports = &.{
             .{ .name = "zsync", .module = zsync_mod },
+            .{ .name = "zlog", .module = zlog_mod },
+            .{ .name = "zpack", .module = zpack_mod },
         },
     });
 
@@ -74,6 +92,42 @@ pub fn build(b: *std.Build) void {
         });
     }
 
+    // Create HTTP/2 transport adapter module
+    var http2_mod: ?*std.Build.Module = null;
+    if (enable_http2) {
+        http2_mod = b.addModule("zrpc-transport-http2", .{
+            .root_source_file = b.path("src/adapters/http2/transport.zig"),
+            .target = target,
+            .imports = &.{
+                .{ .name = "zrpc-core", .module = core_mod },
+            },
+        });
+    }
+
+    // Create UDS transport adapter module
+    var uds_mod: ?*std.Build.Module = null;
+    if (enable_uds) {
+        uds_mod = b.addModule("zrpc-transport-uds", .{
+            .root_source_file = b.path("src/adapters/uds/transport.zig"),
+            .target = target,
+            .imports = &.{
+                .{ .name = "zrpc-core", .module = core_mod },
+            },
+        });
+    }
+
+    // Create WebSocket transport adapter module
+    var websocket_mod: ?*std.Build.Module = null;
+    if (enable_websocket) {
+        websocket_mod = b.addModule("zrpc-transport-websocket", .{
+            .root_source_file = b.path("src/adapters/websocket/transport.zig"),
+            .target = target,
+            .imports = &.{
+                .{ .name = "zrpc-core", .module = core_mod },
+            },
+        });
+    }
+
     // Create main zrpc module for backward compatibility
     const mod = b.addModule("zrpc", .{
         .root_source_file = b.path("src/root.zig"),
@@ -86,6 +140,21 @@ pub fn build(b: *std.Build) void {
     // Add QUIC adapter if enabled
     if (quic_mod) |qmod| {
         mod.addImport("zrpc-transport-quic", qmod);
+    }
+
+    // Add HTTP/2 adapter if enabled
+    if (http2_mod) |h2mod| {
+        mod.addImport("zrpc-transport-http2", h2mod);
+    }
+
+    // Add UDS adapter if enabled
+    if (uds_mod) |umod| {
+        mod.addImport("zrpc-transport-uds", umod);
+    }
+
+    // Add WebSocket adapter if enabled
+    if (websocket_mod) |wsmod| {
+        mod.addImport("zrpc-transport-websocket", wsmod);
     }
 
     // Here we define an executable. An executable needs to have a root module
@@ -210,6 +279,30 @@ pub fn build(b: *std.Build) void {
     const example_run = b.addRunArtifact(example_exe);
     example_run.step.dependOn(b.getInstallStep());
     example_step.dependOn(&example_run.step);
+
+    // Add UDS example executable
+    if (uds_mod) |umod| {
+        const uds_example_exe = b.addExecutable(.{
+            .name = "uds_example",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("examples/uds_example.zig"),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{
+                    .{ .name = "zrpc-core", .module = core_mod },
+                    .{ .name = "zrpc-transport-uds", .module = umod },
+                    .{ .name = "zrpc", .module = mod },
+                },
+            }),
+        });
+        b.installArtifact(uds_example_exe);
+
+        // UDS example run step
+        const uds_example_step = b.step("uds-example", "Run the UDS transport example");
+        const uds_example_run = b.addRunArtifact(uds_example_exe);
+        uds_example_run.step.dependOn(b.getInstallStep());
+        uds_example_step.dependOn(&uds_example_run.step);
+    }
 
     // Add ALPHA-1 test executable
     const alpha_test_exe = b.addExecutable(.{

@@ -333,18 +333,32 @@ pub const UdsServer = struct {
         var addr: std.posix.sockaddr.un = undefined;
         var addr_len: std.posix.socklen_t = @sizeOf(@TypeOf(addr));
 
-        const client_sock = std.posix.accept(
-            self.socket,
-            @ptrCast(&addr),
-            &addr_len,
-            0,
-        ) catch |err| {
-            // Note: std.posix.accept can return SocketNotListening internally but it's
-            // not in the AcceptError type definition, so we handle it in the else case
-            return switch (err) {
-                error.WouldBlock => Error.Unavailable,
-                else => Error.NetworkError,
-            };
+        // Call system.accept() directly to work around std.posix.accept() bug
+        // where it returns error.SocketNotListening but it's not in AcceptError type
+        const client_sock: std.posix.socket_t = while (true) {
+            const rc = std.posix.system.accept(
+                self.socket,
+                @ptrCast(&addr),
+                &addr_len,
+            );
+
+            switch (std.posix.errno(rc)) {
+                .SUCCESS => break @intCast(rc),
+                .INTR => continue, // Interrupted, retry
+                .AGAIN => return Error.Unavailable, // Would block (non-blocking socket)
+                .BADF => unreachable, // Bad file descriptor
+                .CONNABORTED => return Error.NetworkError, // Connection aborted
+                .FAULT => unreachable, // Bad address
+                .INVAL => return Error.NetworkError, // Socket not listening
+                .MFILE => return Error.NetworkError, // Per-process FD limit
+                .NFILE => return Error.NetworkError, // System-wide FD limit
+                .NOBUFS, .NOMEM => return Error.NetworkError, // No memory
+                .NOTSOCK => unreachable, // Not a socket
+                .OPNOTSUPP => unreachable, // Operation not supported
+                .PERM => return Error.PermissionDenied, // Firewall rules
+                .PROTO => return Error.NetworkError, // Protocol error
+                else => return Error.NetworkError, // Unknown error
+            }
         };
 
         return UdsConnection{

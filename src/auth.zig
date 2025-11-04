@@ -242,22 +242,28 @@ pub const JwtClaims = struct {
     }
 
     pub fn setExpiration(self: *JwtClaims, seconds_from_now: i64) void {
-        self.exp = std.time.timestamp() + seconds_from_now;
+        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const now_sec: i64 = @intCast(ts.sec);
+        self.exp = now_sec + seconds_from_now;
     }
 
     pub fn setIssuedNow(self: *JwtClaims) void {
-        self.iat = std.time.timestamp();
+        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        self.iat = @intCast(ts.sec);
     }
 
     pub fn isExpired(self: *const JwtClaims) bool {
         if (self.exp) |exp| {
-            return std.time.timestamp() > exp;
+            const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+            const now_sec: i64 = @intCast(ts.sec);
+            return now_sec > exp;
         }
         return false;
     }
 
     pub fn isValidNow(self: *const JwtClaims) bool {
-        const now = std.time.timestamp();
+        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const now: i64 = @intCast(ts.sec);
 
         if (self.exp) |exp| {
             if (now > exp) return false;

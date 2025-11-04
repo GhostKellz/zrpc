@@ -267,8 +267,8 @@ pub const Http2Transport = struct {
         // Connect to server
         var io_threaded = std.Io.Threaded.init_single_threaded;
         const io = io_threaded.io();
-        const address = std.Io.net.Address.resolveIp(host, port) catch return Error.NetworkError;
-        const stream = address.connect(io) catch return Error.NetworkError;
+        const address = std.Io.net.IpAddress.resolve(io, host, port) catch return Error.NetworkError;
+        const stream = address.connect(io, .{}) catch return Error.NetworkError;
         defer stream.close(io);
 
         var connection = Http2Connection.initClient(self.allocator, stream);
@@ -384,7 +384,11 @@ pub const QuicTransport = struct {
             "/";
 
         // Create QUIC connection
-        const address = std.Io.net.Address.resolveIp(host, port) catch return Error.NetworkError;
+        // Note: We need an io instance for resolve, but for QUIC we may not need it
+        // For now, parse the address or use a reasonable default approach
+        var io_threaded = std.Io.Threaded.init_single_threaded;
+        const io = io_threaded.io();
+        const address = std.Io.net.IpAddress.resolve(io, host, port) catch return Error.NetworkError;
         var connection = quic.QuicConnection.initClient(self.allocator, address) catch return Error.NetworkError;
         defer connection.deinit();
 
@@ -499,9 +503,8 @@ test "http2 frame creation" {
 
 test "http2 tls integration" {
     // Mock TLS connection
-    var io_threaded = std.Io.Threaded.init_single_threaded;
-    const io = io_threaded.io();
-    const mock_stream = std.Io.net.Stream{ .socket = .{ .handle = 0 }, .io = io };
+    const mock_address = std.Io.net.Ip4Address.loopback(8080);
+    const mock_stream = std.Io.net.Stream{ .socket = .{ .handle = 0, .address = .{ .ip4 = mock_address } } };
     const tls_config = tls.TlsConfig.clientDefault();
     var tls_conn = tls.TlsConnection.initClient(std.testing.allocator, mock_stream, tls_config);
 
@@ -573,7 +576,7 @@ test "quic frame creation and encoding" {
 }
 
 test "quic connection creation" {
-    const address = std.Io.net.Address.initIp4([4]u8{ 127, 0, 0, 1 }, 8080);
+    const address = std.Io.net.IpAddress{ .ip4 = .{ .bytes = [4]u8{ 127, 0, 0, 1 }, .port = 8080 } };
 
     // This will fail to connect, but we can test the initialization path.
     var conn = quic.QuicConnection.initClient(std.testing.allocator, address) catch |err| {

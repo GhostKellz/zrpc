@@ -42,12 +42,12 @@ pub const TlsConfig = struct {
 
 pub const TlsConnection = struct {
     allocator: std.mem.Allocator,
-    underlying_stream: std.net.Stream,
+    underlying_stream: std.Io.net.Stream,
     config: TlsConfig,
     is_client: bool,
     is_handshake_complete: bool,
 
-    pub fn initClient(allocator: std.mem.Allocator, stream: std.net.Stream, config: TlsConfig) TlsConnection {
+    pub fn initClient(allocator: std.mem.Allocator, stream: std.Io.net.Stream, config: TlsConfig) TlsConnection {
         return TlsConnection{
             .allocator = allocator,
             .underlying_stream = stream,
@@ -57,7 +57,7 @@ pub const TlsConnection = struct {
         };
     }
 
-    pub fn initServer(allocator: std.mem.Allocator, stream: std.net.Stream, config: TlsConfig) TlsConnection {
+    pub fn initServer(allocator: std.mem.Allocator, stream: std.Io.net.Stream, config: TlsConfig) TlsConnection {
         return TlsConnection{
             .allocator = allocator,
             .underlying_stream = stream,
@@ -148,8 +148,10 @@ pub const TlsTransport = struct {
 
     pub fn connect(self: *TlsTransport, host: []const u8, port: u16) Error!TlsConnection {
         // Connect to the host
-        const address = std.net.Address.resolveIp(host, port) catch return Error.NetworkError;
-        const stream = std.net.tcpConnectToAddress(address) catch return Error.NetworkError;
+        var io_threaded = std.Io.Threaded.init_single_threaded;
+        const io = io_threaded.io();
+        const address = std.Io.net.IpAddress.resolve(io, host, port) catch return Error.NetworkError;
+        const stream = address.connect(io, .{}) catch return Error.NetworkError;
 
         var tls_conn = TlsConnection.initClient(self.allocator, stream, self.config);
         try tls_conn.handshake();
@@ -164,7 +166,7 @@ pub const TlsTransport = struct {
         return tls_conn;
     }
 
-    pub fn accept(self: *TlsTransport, stream: std.net.Stream) Error!TlsConnection {
+    pub fn accept(self: *TlsTransport, stream: std.Io.net.Stream) Error!TlsConnection {
         var tls_conn = TlsConnection.initServer(self.allocator, stream, self.config);
         try tls_conn.handshake();
 
@@ -196,7 +198,10 @@ test "tls config creation" {
 
 test "tls connection handshake" {
     // Mock TCP stream
-    const mock_stream = std.net.Stream{ .handle = 0 };
+    var io_threaded = std.Io.Threaded.init_single_threaded;
+    const io = io_threaded.io();
+    const mock_address = std.Io.net.Ip4Address.loopback(8080);
+    const mock_stream = std.Io.net.Stream{ .socket = .{ .handle = 0, .address = .{ .ip4 = mock_address } }, .io = io };
     const config = TlsConfig.clientDefault();
 
     var tls_conn = TlsConnection.initClient(std.testing.allocator, mock_stream, config);

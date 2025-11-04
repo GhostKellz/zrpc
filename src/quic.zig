@@ -105,10 +105,12 @@ pub const SessionTicket = struct {
         const owned_ticket = try allocator.dupe(u8, ticket_data);
         const owned_alpn = try allocator.dupe(u8, "h3"); // HTTP/3 for gRPC
 
+        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const creation_time: i64 = @intCast(ts.sec);
         return SessionTicket{
             .ticket_data = owned_ticket,
             .early_data_limit = early_data_limit,
-            .creation_time = std.time.timestamp(),
+            .creation_time = creation_time,
             .max_early_data_size = early_data_limit,
             .alpn_protocol = owned_alpn,
             .allocator = allocator,
@@ -121,7 +123,8 @@ pub const SessionTicket = struct {
     }
 
     pub fn isValid(self: *const SessionTicket) bool {
-        const current_time = std.time.timestamp();
+        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const current_time: i64 = @intCast(ts.sec);
         const max_age = 7 * 24 * 60 * 60; // 7 days in seconds
         return (current_time - self.creation_time) < max_age;
     }
@@ -217,8 +220,8 @@ pub const MigrationContext = struct {
 
 // Network path for connection migration
 pub const NetworkPath = struct {
-    local_address: std.net.Address,
-    peer_address: std.net.Address,
+    local_address: std.Io.net.IpAddress,
+    peer_address: std.Io.net.IpAddress,
     path_id: u64,
     rtt: u64, // Round-trip time in microseconds
     mtu: u32, // Maximum transmission unit
@@ -226,7 +229,7 @@ pub const NetworkPath = struct {
     last_validation: i64,
     challenge_data: ?[8]u8,
 
-    pub fn init(local: std.net.Address, peer: std.net.Address, path_id: u64) NetworkPath {
+    pub fn init(local: std.Io.net.IpAddress, peer: std.Io.net.IpAddress, path_id: u64) NetworkPath {
         return NetworkPath{
             .local_address = local,
             .peer_address = peer,
@@ -244,7 +247,8 @@ pub const NetworkPath = struct {
     }
 
     pub fn needsValidation(self: *const NetworkPath) bool {
-        const current_time = std.time.timestamp();
+        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const current_time: i64 = @intCast(ts.sec);
         const validation_timeout = 60; // 1 minute
         return !self.validated or
                (current_time - self.last_validation) > validation_timeout;
@@ -255,7 +259,8 @@ pub const NetworkPath = struct {
         var challenge: [8]u8 = undefined;
         rng.bytes(&challenge);
         self.challenge_data = challenge;
-        self.last_validation = std.time.timestamp();
+        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        self.last_validation = @intCast(ts.sec);
     }
 };
 
@@ -535,8 +540,8 @@ pub const QuicConnection = struct {
     peer_connection_id: ConnectionId,
     streams: std.AutoHashMap(u64, *QuicStream),
     next_stream_id: u64,
-    socket: std.net.Stream,
-    peer_address: std.net.Address,
+    socket: std.Io.net.Stream,
+    peer_address: std.Io.net.IpAddress,
     is_server: bool,
 
     // Advanced features
@@ -552,8 +557,10 @@ pub const QuicConnection = struct {
     current_path_id: u64,
     path_validation_tokens: std.AutoHashMap(u64, [8]u8),
 
-    pub fn initClient(allocator: std.mem.Allocator, peer_address: std.net.Address) !QuicConnection {
-        const socket = try std.net.tcpConnectToAddress(peer_address);
+    pub fn initClient(allocator: std.mem.Allocator, peer_address: std.Io.net.IpAddress) !QuicConnection {
+        var io_threaded = std.Io.Threaded.init_single_threaded;
+        const io = io_threaded.io();
+        const socket = try peer_address.connect(io, .{});
 
         return QuicConnection{
             .allocator = allocator,
@@ -577,7 +584,7 @@ pub const QuicConnection = struct {
         };
     }
 
-    pub fn initServer(allocator: std.mem.Allocator, socket: std.net.Stream, peer_address: std.net.Address) !QuicConnection {
+    pub fn initServer(allocator: std.mem.Allocator, socket: std.Io.net.Stream, peer_address: std.Io.net.IpAddress) !QuicConnection {
         return QuicConnection{
             .allocator = allocator,
             .state = .initial,
@@ -726,10 +733,11 @@ pub const QuicConnection = struct {
     }
 
     // Connection migration methods
-    pub fn startPathMigration(self: *QuicConnection, new_address: std.net.Address) !void {
+    pub fn startPathMigration(self: *QuicConnection, new_address: std.Io.net.IpAddress) !void {
         const path_id = self.current_path_id + 1;
+        const local_addr = std.Io.net.IpAddress{ .ip4 = std.Io.net.Ip4Address.unspecified(0) };
         const new_path = NetworkPath.init(
-            try std.net.Address.parseIp4("0.0.0.0", 0), // Local will be assigned by OS
+            local_addr, // Local will be assigned by OS
             new_address,
             path_id
         );
@@ -785,7 +793,8 @@ pub const QuicConnection = struct {
             if (path.challenge_data) |challenge| {
                 if (std.mem.eql(u8, &challenge, &response_data)) {
                     path.validated = true;
-                    path.last_validation = std.time.timestamp();
+                    const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+                    path.last_validation = @intCast(ts.sec);
 
                     // If this was the primary path, migration is complete
                     if (self.migration_context.primary_path == path) {
@@ -916,8 +925,8 @@ test "path challenge and response frames" {
 }
 
 test "connection migration" {
-    const local_addr = std.net.Address.initIp4([4]u8{ 127, 0, 0, 1 }, 8080);
-    const peer_addr = std.net.Address.initIp4([4]u8{ 127, 0, 0, 1 }, 8081);
+    const local_addr = std.Io.net.IpAddress{ .ip4 = .{ .bytes = [4]u8{ 127, 0, 0, 1 }, .port = 8080 } };
+    const peer_addr = std.Io.net.IpAddress{ .ip4 = .{ .bytes = [4]u8{ 127, 0, 0, 1 }, .port = 8081 } };
 
     var path = NetworkPath.init(local_addr, peer_addr, 1);
     defer path.deinit();

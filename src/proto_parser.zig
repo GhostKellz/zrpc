@@ -962,7 +962,12 @@ pub fn parseProtoFromFile(allocator: std.mem.Allocator, file_path: []const u8) !
     const content = try allocator.alloc(u8, file_size);
     defer allocator.free(content);
 
-    _ = try file.readAll(content);
+    // Create IO and reader with proper buffer for file reading
+    var io_threaded = std.Io.Threaded.init_single_threaded;
+    const io = io_threaded.io();
+    var read_buffer: [4096]u8 = undefined;
+    var file_reader = file.reader(io, &read_buffer);
+    try file_reader.readSliceAll(content);
 
     return parseProtoFile(allocator, content);
 }

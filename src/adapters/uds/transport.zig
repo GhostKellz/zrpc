@@ -338,9 +338,13 @@ pub const UdsServer = struct {
             @ptrCast(&addr),
             &addr_len,
             0,
-        ) catch |err| return switch (err) {
-            error.WouldBlock => Error.Unavailable,
-            else => Error.NetworkError,
+        ) catch |err| {
+            // Note: std.posix.accept can return SocketNotListening internally but it's
+            // not in the AcceptError type definition, so we handle it in the else case
+            return switch (err) {
+                error.WouldBlock => Error.Unavailable,
+                else => Error.NetworkError,
+            };
         };
 
         return UdsConnection{

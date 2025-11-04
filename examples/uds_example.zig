@@ -22,7 +22,7 @@ pub fn main() !void {
     defer server_thread.join();
 
     // Give server time to start
-    std.Thread.sleep(100 * std.time.ns_per_ms);
+    std.posix.nanosleep(0, 100 * 1000 * 1000); // 100ms
 
     // Run client
     try runClient(allocator, socket_path);

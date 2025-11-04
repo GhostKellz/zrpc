@@ -234,14 +234,16 @@ pub const Context = struct {
 
     /// Create context with timeout (relative to now)
     pub fn withTimeout(allocator: std.mem.Allocator, timeout_ns: u64) Context {
-        const now = std.time.nanoTimestamp();
+        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
         return withDeadline(allocator, now + @as(i64, @intCast(timeout_ns)));
     }
 
     /// Check if deadline has been exceeded
     pub fn isDeadlineExceeded(self: *const Context) bool {
         if (self.deadline) |dl| {
-            const now = std.time.nanoTimestamp();
+            const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+            const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
             return now >= dl;
         }
         return false;
@@ -250,7 +252,8 @@ pub const Context = struct {
     /// Get remaining time until deadline
     pub fn getRemainingTime(self: *const Context) ?u64 {
         if (self.deadline) |dl| {
-            const now = std.time.nanoTimestamp();
+            const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+            const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
             if (now >= dl) return 0;
             return @intCast(dl - now);
         }
@@ -343,7 +346,9 @@ test "timeout formatting" {
 test "context with deadline" {
     const allocator = std.testing.allocator;
 
-    const future_deadline: i64 = @intCast(std.time.nanoTimestamp() + (10 * std.time.ns_per_s));
+    const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+    const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
+    const future_deadline: i64 = now + (10 * std.time.ns_per_s);
     var ctx = Context.withDeadline(allocator, future_deadline);
     defer ctx.deinit();
 
@@ -351,7 +356,7 @@ test "context with deadline" {
     try std.testing.expect(ctx.getRemainingTime() != null);
     try std.testing.expect(ctx.getRemainingTime().? > 0);
 
-    const past_deadline: i64 = @intCast(std.time.nanoTimestamp() - (10 * std.time.ns_per_s));
+    const past_deadline: i64 = now - (10 * std.time.ns_per_s);
     var past_ctx = Context.withDeadline(allocator, past_deadline);
     defer past_ctx.deinit();
 

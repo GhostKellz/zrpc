@@ -338,7 +338,10 @@ pub const UdsServer = struct {
             @ptrCast(&addr),
             &addr_len,
             0,
-        ) catch return Error.NetworkError;
+        ) catch |err| return switch (err) {
+            error.WouldBlock => Error.Unavailable,
+            else => Error.NetworkError,
+        };
 
         return UdsConnection{
             .allocator = self.allocator,

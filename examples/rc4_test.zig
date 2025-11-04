@@ -61,7 +61,7 @@ fn testHighConnectionCount(allocator: std.mem.Allocator) !void {
         }
 
         // Brief pause between batches
-        std.Thread.sleep(10 * std.time.ns_per_ms);
+        std.posix.nanosleep(0, 10 * 1000 * 1000); // 10ms
     }
 
     std.debug.print("  ✓ Created {d} concurrent connections\n", .{connections.items.len});
@@ -98,7 +98,7 @@ fn testLongRunningStability(allocator: std.mem.Allocator) !void {
     var failures: usize = 0;
 
     while (elapsed_ms < test_duration_ms) {
-        std.Thread.sleep(check_interval_ms * std.time.ns_per_ms);
+        std.posix.nanosleep(0, check_interval_ms * 1000 * 1000);
         elapsed_ms += check_interval_ms;
         checks += 1;
 
@@ -228,7 +228,7 @@ fn testNetworkPartitionScenarios(allocator: std.mem.Allocator) !void {
     std.debug.print("  ✓ Simulated network partition\n", .{});
 
     // Wait for partition detection
-    std.Thread.sleep(100 * std.time.ns_per_ms);
+    std.posix.nanosleep(0, 100 * 1000 * 1000); // 100ms
 
     if (!conn.hasDetectedPartition()) {
         return error.PartitionNotDetected;
@@ -237,7 +237,7 @@ fn testNetworkPartitionScenarios(allocator: std.mem.Allocator) !void {
 
     // Heal partition
     conn.healNetworkPartition();
-    std.Thread.sleep(100 * std.time.ns_per_ms);
+    std.posix.nanosleep(0, 100 * 1000 * 1000); // 100ms
 
     if (!conn.isHealthy()) {
         return error.PartitionRecoveryFailed;
@@ -263,7 +263,7 @@ fn testRapidConnectDisconnect(allocator: std.mem.Allocator) !void {
 
         // Minimal delay
         if (i % 100 == 0) {
-            std.Thread.sleep(1 * std.time.ns_per_ms);
+            std.posix.nanosleep(0, 1 * 1000 * 1000); // 1ms
         }
     }
 

@@ -138,7 +138,8 @@ pub const BenchmarkRunner = struct {
         defer latency_tracker.deinit();
 
         self.allocation_tracker.reset();
-        const start_time = std.time.nanoTimestamp();
+        const start_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const start_time: i128 = @as(i128, start_ts.sec) * std.time.ns_per_s + start_ts.nsec;
 
         // Warmup
         for (0..self.config.warmup_iterations) |_| {
@@ -147,16 +148,19 @@ pub const BenchmarkRunner = struct {
 
         // Main benchmark
         for (0..self.config.iterations) |_| {
-            const call_start = std.time.nanoTimestamp();
+            const call_start_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+            const call_start: i128 = @as(i128, call_start_ts.sec) * std.time.ns_per_s + call_start_ts.nsec;
 
             const response = client.call("BenchmarkService/Echo", payload) catch continue;
             self.allocator.free(response);
 
-            const call_end = std.time.nanoTimestamp();
+            const call_end_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+            const call_end: i128 = @as(i128, call_end_ts.sec) * std.time.ns_per_s + call_end_ts.nsec;
             try latency_tracker.record(@intCast(call_end - call_start));
         }
 
-        const end_time = std.time.nanoTimestamp();
+        const end_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const end_time: i128 = @as(i128, end_ts.sec) * std.time.ns_per_s + end_ts.nsec;
         const duration_s = @as(f64, @floatFromInt(end_time - start_time)) / 1_000_000_000.0;
 
         const percentiles = latency_tracker.calculatePercentiles();
@@ -201,20 +205,24 @@ pub const BenchmarkRunner = struct {
         @memset(chunk, 'S');
 
         self.allocation_tracker.reset();
-        const start_time = std.time.nanoTimestamp();
+        const start_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const start_time: i128 = @as(i128, start_ts.sec) * std.time.ns_per_s + start_ts.nsec;
 
         // Simplified streaming simulation
         for (0..self.config.streaming_count) |_| {
-            const call_start = std.time.nanoTimestamp();
+            const call_start_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+            const call_start: i128 = @as(i128, call_start_ts.sec) * std.time.ns_per_s + call_start_ts.nsec;
 
             const response = client.call("BenchmarkService/StreamEcho", chunk) catch continue;
             self.allocator.free(response);
 
-            const call_end = std.time.nanoTimestamp();
+            const call_end_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+            const call_end: i128 = @as(i128, call_end_ts.sec) * std.time.ns_per_s + call_end_ts.nsec;
             try latency_tracker.record(@intCast(call_end - call_start));
         }
 
-        const end_time = std.time.nanoTimestamp();
+        const end_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const end_time: i128 = @as(i128, end_ts.sec) * std.time.ns_per_s + end_ts.nsec;
         const duration_s = @as(f64, @floatFromInt(end_time - start_time)) / 1_000_000_000.0;
 
         const percentiles = latency_tracker.calculatePercentiles();

@@ -63,7 +63,8 @@ pub const CircuitBreakerInterceptor = struct {
 
     pub fn init(allocator: std.mem.Allocator, config: CircuitBreakerConfig) !*CircuitBreakerInterceptor {
         const self = try allocator.create(CircuitBreakerInterceptor);
-        const now = std.time.nanoTimestamp();
+        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
 
         self.* = .{
             .allocator = allocator,
@@ -101,7 +102,8 @@ pub const CircuitBreakerInterceptor = struct {
             },
             .open => {
                 // Check if timeout expired
-                const now = std.time.nanoTimestamp();
+                const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+                const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
                 const state_change_time = self.state_changed_at.load(.acquire);
 
                 if (now - state_change_time >= @as(i64, @intCast(self.config.timeout_ns))) {
@@ -181,7 +183,8 @@ pub const CircuitBreakerInterceptor = struct {
     }
 
     fn recordFailure(self: *CircuitBreakerInterceptor) Error!void {
-        const now = std.time.nanoTimestamp();
+        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
         _ = self.failure_count.fetchAdd(1, .monotonic);
         self.last_failure_time.store(now, .release);
 
@@ -240,7 +243,8 @@ pub const CircuitBreakerInterceptor = struct {
                 defer self.mutex.unlock();
 
                 if (self.state.load(.acquire) == .half_open) {
-                    const now = std.time.nanoTimestamp();
+                    const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+                    const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
                     self.state.store(.closed, .release);
                     self.state_changed_at.store(now, .release);
                     self.failure_count.store(0, .release);
@@ -273,7 +277,8 @@ pub const CircuitBreakerInterceptor = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        const now = std.time.nanoTimestamp();
+        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
         self.state.store(.closed, .release);
         self.state_changed_at.store(now, .release);
         self.failure_count.store(0, .release);
@@ -379,7 +384,7 @@ test "circuit breaker half-open transition" {
     try std.testing.expectEqual(CircuitState.open, cb.state.load(.acquire));
 
     // Wait for timeout
-    std.Thread.sleep(150 * std.time.ns_per_ms);
+    std.posix.nanosleep(0, 150 * 1000 * 1000); // 150ms
 
     // Next request should transition to half-open
     try cb.asInterceptor().interceptRequest(&ctx);

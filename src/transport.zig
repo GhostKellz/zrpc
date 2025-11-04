@@ -83,7 +83,7 @@ pub const Frame = struct {
 };
 
 pub const ConnectionType = union(enum) {
-    tcp: std.net.Stream,
+    tcp: std.Io.net.Stream,
     tls: tls.TlsConnection,
     quic: *quic.QuicConnection,
 };
@@ -97,7 +97,7 @@ pub const Http2Connection = struct {
 
     const PREFACE = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
 
-    pub fn initClient(allocator: std.mem.Allocator, stream: std.net.Stream) Http2Connection {
+    pub fn initClient(allocator: std.mem.Allocator, stream: std.Io.net.Stream) Http2Connection {
         return Http2Connection{
             .allocator = allocator,
             .connection = ConnectionType{ .tcp = stream },
@@ -117,7 +117,7 @@ pub const Http2Connection = struct {
         };
     }
 
-    pub fn initServer(allocator: std.mem.Allocator, stream: std.net.Stream) Http2Connection {
+    pub fn initServer(allocator: std.mem.Allocator, stream: std.Io.net.Stream) Http2Connection {
         return Http2Connection{
             .allocator = allocator,
             .connection = ConnectionType{ .tcp = stream },
@@ -265,9 +265,11 @@ pub const Http2Transport = struct {
             "/";
 
         // Connect to server
-        const address = std.net.Address.resolveIp(host, port) catch return Error.NetworkError;
-        const stream = std.net.tcpConnectToAddress(address) catch return Error.NetworkError;
-        defer stream.close();
+        var io_threaded = std.Io.Threaded.init_single_threaded;
+        const io = io_threaded.io();
+        const address = std.Io.net.Address.resolveIp(host, port) catch return Error.NetworkError;
+        const stream = address.connect(io) catch return Error.NetworkError;
+        defer stream.close(io);
 
         var connection = Http2Connection.initClient(self.allocator, stream);
         try connection.sendPreface();
@@ -382,7 +384,7 @@ pub const QuicTransport = struct {
             "/";
 
         // Create QUIC connection
-        const address = std.net.Address.resolveIp(host, port) catch return Error.NetworkError;
+        const address = std.Io.net.Address.resolveIp(host, port) catch return Error.NetworkError;
         var connection = quic.QuicConnection.initClient(self.allocator, address) catch return Error.NetworkError;
         defer connection.deinit();
 
@@ -497,7 +499,9 @@ test "http2 frame creation" {
 
 test "http2 tls integration" {
     // Mock TLS connection
-    const mock_stream = std.net.Stream{ .handle = 0 };
+    var io_threaded = std.Io.Threaded.init_single_threaded;
+    const io = io_threaded.io();
+    const mock_stream = std.Io.net.Stream{ .socket = .{ .handle = 0 }, .io = io };
     const tls_config = tls.TlsConfig.clientDefault();
     var tls_conn = tls.TlsConnection.initClient(std.testing.allocator, mock_stream, tls_config);
 
@@ -569,7 +573,7 @@ test "quic frame creation and encoding" {
 }
 
 test "quic connection creation" {
-    const address = std.net.Address.initIp4([4]u8{ 127, 0, 0, 1 }, 8080);
+    const address = std.Io.net.Address.initIp4([4]u8{ 127, 0, 0, 1 }, 8080);
 
     // This will fail to connect, but we can test the initialization path.
     var conn = quic.QuicConnection.initClient(std.testing.allocator, address) catch |err| {

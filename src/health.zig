@@ -89,14 +89,16 @@ pub const HealthChecker = struct {
 
     /// Check if it's time to send a ping
     pub fn shouldSendPing(self: *const HealthChecker) bool {
-        const now = std.time.nanoTimestamp();
+        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
         return (now - self.last_ping_time) >= @as(i64, @intCast(self.ping_interval));
     }
 
     /// Create and register a new ping
     pub fn createPing(self: *HealthChecker) !PingFrame {
         const ping = PingFrame.init();
-        const now = std.time.nanoTimestamp();
+        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
 
         try self.pending_pings.append(.{
             .ping = ping,
@@ -109,7 +111,8 @@ pub const HealthChecker = struct {
 
     /// Handle received PING ACK
     pub fn receivePingAck(self: *HealthChecker, ack_data: [8]u8) bool {
-        const now = std.time.nanoTimestamp();
+        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
         const ack_ping = PingFrame.initWithData(ack_data);
 
         var i: usize = 0;
@@ -136,7 +139,8 @@ pub const HealthChecker = struct {
 
     /// Check for timed-out pings
     pub fn checkTimeouts(self: *HealthChecker) Error!void {
-        const now = std.time.nanoTimestamp();
+        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
         var i: usize = 0;
 
         while (i < self.pending_pings.items.len) {
@@ -297,7 +301,9 @@ test "health checker basic flow" {
     try std.testing.expect(!checker.shouldSendPing());
 
     // Simulate time passing
-    checker.last_ping_time = std.time.nanoTimestamp() - (11 * std.time.ns_per_s);
+    const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+    const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
+    checker.last_ping_time = now - (11 * std.time.ns_per_s);
     try std.testing.expect(checker.shouldSendPing());
 
     // Create ping
@@ -318,9 +324,11 @@ test "health checker timeout" {
 
     // Create ping with past timestamp
     const ping = PingFrame.init();
+    const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+    const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
     try checker.pending_pings.append(.{
         .ping = ping,
-        .sent_at = std.time.nanoTimestamp() - (2 * std.time.ns_per_s),
+        .sent_at = now - (2 * std.time.ns_per_s),
     });
 
     // Check timeouts should mark unhealthy

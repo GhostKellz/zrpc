@@ -204,7 +204,8 @@ fn benchmarkUnaryRPC(allocator: std.mem.Allocator, iterations: usize) !LatencySt
     defer allocator.free(latencies);
 
     for (0..iterations) |i| {
-        const start = std.time.nanoTimestamp();
+        const start_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const start: i128 = @as(i128, start_ts.sec) * std.time.ns_per_s + start_ts.nsec;
 
         const req = TestRequest{
             .id = i,
@@ -213,7 +214,8 @@ fn benchmarkUnaryRPC(allocator: std.mem.Allocator, iterations: usize) !LatencySt
         };
         _ = try client.callUnary("Bench/Method", req);
 
-        const end = std.time.nanoTimestamp();
+        const end_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        const end: i128 = @as(i128, end_ts.sec) * std.time.ns_per_s + end_ts.nsec;
         latencies[i] = @intCast(@divTrunc(end - start, 1000)); // Convert to microseconds
     }
 
@@ -231,7 +233,8 @@ fn benchmarkThroughput(allocator: std.mem.Allocator, iterations: usize) !u64 {
     var client = MockClient.init(allocator);
     defer client.deinit();
 
-    const start = std.time.nanoTimestamp();
+    const start_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+    const start: i128 = @as(i128, start_ts.sec) * std.time.ns_per_s + start_ts.nsec;
 
     for (0..iterations) |i| {
         const req = TestRequest{
@@ -242,7 +245,8 @@ fn benchmarkThroughput(allocator: std.mem.Allocator, iterations: usize) !u64 {
         _ = try client.callUnary("Bench/Throughput", req);
     }
 
-    const end = std.time.nanoTimestamp();
+    const end_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+    const end: i128 = @as(i128, end_ts.sec) * std.time.ns_per_s + end_ts.nsec;
     const elapsed_sec = @as(f64, @floatFromInt(end - start)) / 1_000_000_000.0;
 
     return @intFromFloat(@as(f64, @floatFromInt(iterations)) / elapsed_sec);
@@ -252,7 +256,8 @@ fn benchmarkStreamingThroughput(allocator: std.mem.Allocator, iterations: usize)
     var client = MockClient.init(allocator);
     defer client.deinit();
 
-    const start = std.time.nanoTimestamp();
+    const start_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+    const start: i128 = @as(i128, start_ts.sec) * std.time.ns_per_s + start_ts.nsec;
 
     var stream = try client.openBidiStream("Bench/Stream");
     defer stream.close();
@@ -261,7 +266,8 @@ fn benchmarkStreamingThroughput(allocator: std.mem.Allocator, iterations: usize)
         try stream.send(TestMessage{ .seq = i, .data = "bench" });
     }
 
-    const end = std.time.nanoTimestamp();
+    const end_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+    const end: i128 = @as(i128, end_ts.sec) * std.time.ns_per_s + end_ts.nsec;
     const elapsed_sec = @as(f64, @floatFromInt(end - start)) / 1_000_000_000.0;
 
     return @intFromFloat(@as(f64, @floatFromInt(iterations)) / elapsed_sec);
@@ -397,7 +403,7 @@ const MockClient = struct {
     fn callUnary(_: *MockClient, _: []const u8, _: TestRequest) !TestResponse {
         // Simulate minimal latency (10-50μs)
         const delay_ns = 10_000 + @mod(std.crypto.random.int(u32), 40_000);
-        std.Thread.sleep(delay_ns);
+        std.posix.nanosleep(0, delay_ns);
         return TestResponse{ .success = true };
     }
 
@@ -467,7 +473,8 @@ const ResourceProfiler = struct {
     }
 
     fn startProfiling(self: *ResourceProfiler) void {
-        self.start_time = std.time.nanoTimestamp();
+        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
+        self.start_time = @as(i128, ts.sec) * std.time.ns_per_s + ts.nsec;
     }
 
     fn stopProfiling(_: *ResourceProfiler) ResourceStats {

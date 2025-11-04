@@ -49,8 +49,8 @@
             .hash = "zdoc-0.1.0-ARcu66JtAgBnisiTly_5j-3ccJZtFh6XTDbV0bKPtKAE",
         },
         .zsync = .{
-            .url = "https://github.com/ghostkellz/zsync/archive/refs/heads/main.tar.gz",
-            .hash = "zsync-0.6.1-KAuhedFXIADqHJzPi8ZCIVkvWRzaY5L5CXVd7vA9jfLM",
+            .url = "https://github.com/ghostkellz/zsync/archive/main.tar.gz",
+            .hash = "zsync-0.7.0-KAuhecoIIQDfUZkcDiBPgGKxt4kb5Mu3b91HMKxZ0BKd",
         },
     },
     .paths = .{

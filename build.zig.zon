@@ -33,8 +33,8 @@
     // internet connectivity.
     .dependencies = .{
         .zquic = .{
-            .url = "https://github.com/ghostkellz/zquic/archive/refs/heads/main.tar.gz",
-            .hash = "zquic-0.9.1-2rPds_HJmxPG7o8qYwnGdYHhKGu12-1Li00E5M6-u3yh",
+            .url = "https://github.com/ghostkellz/zquic/archive/main.tar.gz",
+            .hash = "zquic-0.9.2-2rPdswXCmxPf1U5nhu45an5Gm3vzmASfrhIC4kbLf0-U",
         },
         .zlog = .{
             .url = "https://github.com/ghostkellz/zlog/archive/refs/heads/main.tar.gz",
@@ -45,8 +45,8 @@
             .hash = "zpack-0.3.2-_6t6Jg10CAAy8EJzZFanljXUdaSuAmTDjsr9Qwljnlaz",
         },
         .zdoc = .{
-            .url = "https://github.com/ghostkellz/zdoc/archive/refs/heads/main.tar.gz",
-            .hash = "zdoc-0.1.0-ARcu66JtAgBnisiTly_5j-3ccJZtFh6XTDbV0bKPtKAE",
+            .url = "https://github.com/ghostkellz/zdoc/archive/main.tar.gz",
+            .hash = "zdoc-0.1.0-ARcu67hxAgBqUFUj2an9vBgIPfNTqX5L8Z014NY-6HJJ",
         },
         .zsync = .{
             .url = "https://github.com/ghostkellz/zsync/archive/refs/heads/main.tar.gz",

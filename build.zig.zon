@@ -34,15 +34,15 @@
     .dependencies = .{
         .zquic = .{
             .url = "https://github.com/ghostkellz/zquic/archive/main.tar.gz",
-            .hash = "zquic-0.9.2-2rPdswXCmxPf1U5nhu45an5Gm3vzmASfrhIC4kbLf0-U",
+            .hash = "zquic-0.9.3-2rPds_6wEQDYJ-02AIo0i_LyQByoZOG3blIVi2t7I4uP",
         },
         .zlog = .{
             .url = "https://github.com/ghostkellz/zlog/archive/refs/heads/main.tar.gz",
             .hash = "zlog-0.1.2-kS0sWPD2CAAC0AEFacslajC4VOPVe9gInDl3nDKDsAJF",
         },
         .zpack = .{
-            .url = "https://github.com/ghostkellz/zpack/archive/refs/heads/main.tar.gz",
-            .hash = "zpack-0.3.2-_6t6Jg10CAAy8EJzZFanljXUdaSuAmTDjsr9Qwljnlaz",
+            .url = "https://github.com/ghostkellz/zpack/archive/main.tar.gz",
+            .hash = "zpack-0.3.3-_6t6JvlZCgAeKyBIFHNdf8taBB9fkEJ4Ut9GhHdZBnTd",
         },
         .zdoc = .{
             .url = "https://github.com/ghostkellz/zdoc/archive/main.tar.gz",

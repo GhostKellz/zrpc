@@ -4,6 +4,12 @@ const std = @import("std");
 const quic = @import("quic.zig");
 const Error = @import("error.zig").Error;
 
+/// Get current Unix timestamp in seconds using posix clock_gettime
+fn getTimestamp() i64 {
+    const ts = std.posix.clock_gettime(.REALTIME) catch return 0;
+    return ts.sec;
+}
+
 // Connection pool statistics
 pub const PoolStats = struct {
     total_connections: u32,
@@ -74,7 +80,7 @@ pub const PooledConnection = struct {
 
     pub fn init(allocator: std.mem.Allocator, connection: *quic.QuicConnection, endpoint: []const u8) !PooledConnection {
         const owned_endpoint = try allocator.dupe(u8, endpoint);
-        const now = std.time.timestamp();
+        const now = getTimestamp();
 
         return PooledConnection{
             .connection = connection,
@@ -95,18 +101,18 @@ pub const PooledConnection = struct {
     }
 
     pub fn updateStats(self: *PooledConnection, rtt_microseconds: u64) void {
-        self.last_used = std.time.timestamp();
+        self.last_used = getTimestamp();
         self.request_count += 1;
         self.current_rtt_microseconds = rtt_microseconds;
     }
 
     pub fn isIdle(self: *const PooledConnection, max_idle_seconds: u32) bool {
-        const now = std.time.timestamp();
+        const now = getTimestamp();
         return (now - self.last_used) > max_idle_seconds;
     }
 
     pub fn age(self: *const PooledConnection) i64 {
-        const now = std.time.timestamp();
+        const now = getTimestamp();
         return now - self.created_at;
     }
 };
@@ -385,6 +391,7 @@ test "pooled connection lifecycle" {
     defer std.testing.allocator.destroy(mock_quic_conn);
 
     // Initialize with minimal setup for testing
+    const mock_address = std.Io.net.Ip4Address.loopback(8080);
     mock_quic_conn.* = quic.QuicConnection{
         .allocator = std.testing.allocator,
         .state = .initial,
@@ -392,8 +399,8 @@ test "pooled connection lifecycle" {
         .peer_connection_id = quic.ConnectionId.init("peer"),
         .streams = std.AutoHashMap(u64, *quic.QuicStream).init(std.testing.allocator),
         .next_stream_id = 0,
-        .socket = std.net.Stream{ .handle = 0 },
-        .peer_address = std.net.Address.initIp4([4]u8{ 127, 0, 0, 1 }, 8080),
+        .socket = std.Io.net.Stream{ .socket = .{ .handle = 0, .address = .{ .ip4 = mock_address } } },
+        .peer_address = .{ .ip4 = mock_address },
         .is_server = false,
         .early_data_context = quic.EarlyDataContext.init(),
         .migration_context = quic.MigrationContext.init(std.testing.allocator),

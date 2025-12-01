@@ -7,6 +7,7 @@ const Error = @import("error.zig").Error;
 // Proto file AST nodes
 pub const ProtoFile = struct {
     syntax: []const u8,
+    syntax_allocated: bool,
     package: ?[]const u8,
     imports: std.ArrayList([]const u8),
     options: std.StringHashMap([]const u8),
@@ -18,6 +19,7 @@ pub const ProtoFile = struct {
     pub fn init(allocator: std.mem.Allocator) ProtoFile {
         return ProtoFile{
             .syntax = "proto3",
+            .syntax_allocated = false,
             .package = null,
             .imports = std.ArrayList([]const u8){},
             .options = std.StringHashMap([]const u8).init(allocator),
@@ -29,6 +31,9 @@ pub const ProtoFile = struct {
     }
 
     pub fn deinit(self: *ProtoFile) void {
+        if (self.syntax_allocated) {
+            self.allocator.free(self.syntax);
+        }
         if (self.package) |pkg| {
             self.allocator.free(pkg);
         }
@@ -593,6 +598,7 @@ pub const Parser = struct {
         const syntax_value = self.current_token.value;
         const syntax = syntax_value[1..syntax_value.len-1];
         proto_file.syntax = try self.allocator.dupe(u8, syntax);
+        proto_file.syntax_allocated = true;
 
         self.nextToken();
         try self.expect(";");
@@ -742,8 +748,8 @@ pub const Parser = struct {
 
         self.nextToken();
 
-        // Parse field name
-        if (self.current_token.type != .identifier) {
+        // Parse field name (can be identifier or keyword, since keywords like "message" are valid field names)
+        if (self.current_token.type != .identifier and self.current_token.type != .keyword) {
             return Error.InvalidArgument;
         }
 
@@ -967,7 +973,7 @@ pub fn parseProtoFromFile(allocator: std.mem.Allocator, file_path: []const u8) !
     const io = io_threaded.io();
     var read_buffer: [4096]u8 = undefined;
     var file_reader = file.reader(io, &read_buffer);
-    try file_reader.readSliceAll(content);
+    try file_reader.interface.readSliceAll(content);
 
     return parseProtoFile(allocator, content);
 }

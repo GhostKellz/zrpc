@@ -560,7 +560,7 @@ pub const QuicConnection = struct {
     pub fn initClient(allocator: std.mem.Allocator, peer_address: std.Io.net.IpAddress) !QuicConnection {
         var io_threaded = std.Io.Threaded.init_single_threaded;
         const io = io_threaded.io();
-        const socket = try peer_address.connect(io, .{});
+        const socket = try peer_address.connect(io, .{ .mode = .dgram });
 
         return QuicConnection{
             .allocator = allocator,
@@ -628,7 +628,10 @@ pub const QuicConnection = struct {
             self.allocator.free(ticket);
         }
 
-        self.socket.close();
+        // Create io for close operation
+        var io_threaded = std.Io.Threaded.init_single_threaded;
+        const io = io_threaded.io();
+        self.socket.close(io);
     }
 
     pub fn createStream(self: *QuicConnection) !*QuicStream {
@@ -650,12 +653,24 @@ pub const QuicConnection = struct {
         const encoded = try packet.encode(self.allocator);
         defer self.allocator.free(encoded);
 
-        _ = try self.socket.write(encoded);
+        // Create io and writer for socket write
+        var io_threaded = std.Io.Threaded.init_single_threaded;
+        const io = io_threaded.io();
+        var write_buffer: [4096]u8 = undefined;
+        var socket_writer = self.socket.writer(io, &write_buffer);
+        try socket_writer.interface.writeAll(encoded);
+        try socket_writer.interface.flush();
     }
 
     pub fn receivePacket(self: *QuicConnection) !QuicPacket {
+        // Create io and reader for socket read
+        var io_threaded = std.Io.Threaded.init_single_threaded;
+        const io = io_threaded.io();
+        var read_buffer: [4096]u8 = undefined;
+        var socket_reader = self.socket.reader(io, &read_buffer);
+
         var buffer: [2048]u8 = undefined;
-        const bytes_read = try self.socket.read(&buffer);
+        const bytes_read = socket_reader.interface.readSliceShort(&buffer) catch return Error.NetworkError;
 
         // Simplified packet parsing - in real implementation would need proper parsing
         if (bytes_read < 16) return Error.InvalidData;

@@ -84,8 +84,8 @@ pub const TlsConnection = struct {
             return Error.Internal; // Only TLS 1.3 supported
         }
 
-        // Simulate handshake delay
-        std.Thread.sleep(1000000); // 1ms
+        // Simulate handshake delay (1ms = 1_000_000 ns)
+        std.posix.nanosleep(0, 1_000_000);
 
         self.is_handshake_complete = true;
     }
@@ -198,10 +198,8 @@ test "tls config creation" {
 
 test "tls connection handshake" {
     // Mock TCP stream
-    var io_threaded = std.Io.Threaded.init_single_threaded;
-    const io = io_threaded.io();
     const mock_address = std.Io.net.Ip4Address.loopback(8080);
-    const mock_stream = std.Io.net.Stream{ .socket = .{ .handle = 0, .address = .{ .ip4 = mock_address } }, .io = io };
+    const mock_stream = std.Io.net.Stream{ .socket = .{ .handle = 0, .address = .{ .ip4 = mock_address } } };
     const config = TlsConfig.clientDefault();
 
     var tls_conn = TlsConnection.initClient(std.testing.allocator, mock_stream, config);

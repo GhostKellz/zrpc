@@ -132,7 +132,9 @@ pub const CodeGenerator = struct {
 
         for (message.fields.items) |*field| {
             if (field.label == .repeated) {
-                try self.writef(".{s} = std.ArrayList({s}).init(allocator),", .{ field.name, try self.fieldTypeToZig(field) });
+                const zig_type = try self.fieldTypeToZig(field);
+                defer self.allocator.free(zig_type);
+                try self.writef(".{s} = std.ArrayList({s}).init(allocator),", .{ field.name, zig_type });
             } else if (field.label == .optional) {
                 try self.writef(".{s} = null,", .{field.name});
             } else {
@@ -238,7 +240,9 @@ pub const CodeGenerator = struct {
             try self.writeLine("}");
         } else {
             try self.writef("try protobuf.encodeVarint(&buffer, {});", .{tag});
-            try self.generateSingleFieldEncoding(field, try std.fmt.allocPrint(self.allocator, "self.{s}", .{field.name}));
+            const value_expr = try std.fmt.allocPrint(self.allocator, "self.{s}", .{field.name});
+            defer self.allocator.free(value_expr);
+            try self.generateSingleFieldEncoding(field, value_expr);
         }
         try self.writeLine("");
     }
@@ -569,16 +573,15 @@ pub const CodeGenerator = struct {
 };
 
 // Public API
-pub fn generateZigCode(allocator: std.mem.Allocator, proto_file: *const proto_parser.ProtoFile, options: CodegenOptions) ![]u8 {
+pub fn generateZigCode(allocator: std.mem.Allocator, proto_file: *const proto_parser.ProtoFile, options: CodegenOptions) ![]const u8 {
     var generator = CodeGenerator.init(allocator, options);
     defer generator.deinit();
 
-    const result = try generator.generateFromProto(proto_file);
-    // Dupe to return mutable slice
-    return allocator.dupe(u8, result);
+    // generateFromProto returns owned memory from toOwnedSlice, return it directly
+    return try generator.generateFromProto(proto_file);
 }
 
-pub fn generateFromProtoFile(allocator: std.mem.Allocator, proto_path: []const u8, options: CodegenOptions) ![]u8 {
+pub fn generateFromProtoFile(allocator: std.mem.Allocator, proto_path: []const u8, options: CodegenOptions) ![]const u8 {
     var proto_file = try proto_parser.parseProtoFromFile(allocator, proto_path);
     defer proto_file.deinit();
 

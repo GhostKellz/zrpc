@@ -581,7 +581,7 @@ test "quic connection creation" {
     // This will fail to connect, but we can test the initialization path.
     var conn = quic.QuicConnection.initClient(std.testing.allocator, address) catch |err| {
         switch (err) {
-            error.ConnectionRefused, error.NetworkUnreachable, error.ConnectionTimedOut, error.AddressNotAvailable => return,
+            error.ConnectionRefused, error.NetworkUnreachable, error.Timeout, error.AddressUnavailable => return,
             else => return err,
         }
     };

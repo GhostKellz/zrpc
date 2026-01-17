@@ -2,6 +2,21 @@ const std = @import("std");
 const zrpc = @import("zrpc-core");
 const zrq = @import("zrpc-transport-quic");
 
+// Helper function for nanosleep (std.posix.nanosleep was removed in Zig 0.16)
+fn nanosleep(sec: i64, nsec: i64) void {
+    const sleep_time = std.posix.timespec{
+        .sec = @intCast(sec),
+        .nsec = @intCast(nsec),
+    };
+    _ = std.posix.system.nanosleep(&sleep_time, null);
+}
+
+// Simple PRNG for test jitter (std.crypto.random was removed in Zig 0.16)
+var test_prng: std.Random.DefaultPrng = std.Random.DefaultPrng.init(0x853c49e6748fea9b);
+fn getTestRandom() std.Random {
+    return test_prng.random();
+}
+
 /// RC-5: Final Validation and Release Preparation
 /// This test suite validates:
 /// 1. End-to-end integration tests with complex scenarios
@@ -402,8 +417,8 @@ const MockClient = struct {
 
     fn callUnary(_: *MockClient, _: []const u8, _: TestRequest) !TestResponse {
         // Simulate minimal latency (10-50μs)
-        const delay_ns = 10_000 + @mod(std.crypto.random.int(u32), 40_000);
-        std.posix.nanosleep(0, delay_ns);
+        const delay_ns = 10_000 + @mod(getTestRandom().int(u32), 40_000);
+        nanosleep(0, delay_ns);
         return TestResponse{ .success = true };
     }
 

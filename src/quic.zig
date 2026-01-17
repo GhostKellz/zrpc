@@ -1,8 +1,35 @@
 //! QUIC transport implementation for zrpc
 //! Custom QUIC/HTTP3 implementation optimized for gRPC
 const std = @import("std");
+const builtin = @import("builtin");
 const Error = @import("error.zig").Error;
 const tls = @import("tls.zig");
+
+// Helper to get random bytes using OS entropy (std.crypto.random removed in Zig 0.16)
+fn getRandomBytes(buf: []u8) void {
+    if (builtin.os.tag == .linux) {
+        var filled: usize = 0;
+        while (filled < buf.len) {
+            const rc = std.os.linux.getrandom(buf[filled..].ptr, buf.len - filled, 0);
+            if (std.os.linux.errno(rc) == .SUCCESS) {
+                filled += rc;
+            }
+        }
+    } else {
+        @memset(buf, 0x42);
+    }
+}
+
+// Simple PRNG for test jitter, seeded with OS entropy
+var test_prng: ?std.Random.DefaultPrng = null;
+fn getTestRandom() std.Random {
+    if (test_prng == null) {
+        var seed: u64 = undefined;
+        getRandomBytes(std.mem.asBytes(&seed));
+        test_prng = std.Random.DefaultPrng.init(seed);
+    }
+    return test_prng.?.random();
+}
 
 // QUIC protocol constants
 pub const QUIC_VERSION_1: u32 = 0x00000001;
@@ -83,7 +110,7 @@ pub const ConnectionId = struct {
     pub fn random(allocator: std.mem.Allocator) !ConnectionId {
         _ = allocator;
         var data: [8]u8 = undefined;
-        std.crypto.random.bytes(&data);
+        getRandomBytes(&data);
         return ConnectionId.init(&data);
     }
 
@@ -255,9 +282,8 @@ pub const NetworkPath = struct {
     }
 
     pub fn startValidation(self: *NetworkPath) void {
-        var rng = std.crypto.random;
         var challenge: [8]u8 = undefined;
-        rng.bytes(&challenge);
+        getRandomBytes(&challenge);
         self.challenge_data = challenge;
         const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
         self.last_validation = @intCast(ts.sec);

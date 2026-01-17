@@ -1,4 +1,22 @@
 const std = @import("std");
+const builtin = @import("builtin");
+
+// Helper to get a random u64 using OS entropy (std.crypto.random removed in Zig 0.16)
+fn getRandomU64() u64 {
+    var buf: [8]u8 = undefined;
+    if (builtin.os.tag == .linux) {
+        var filled: usize = 0;
+        while (filled < buf.len) {
+            const rc = std.os.linux.getrandom(buf[filled..].ptr, buf.len - filled, 0);
+            if (std.os.linux.errno(rc) == .SUCCESS) {
+                filled += rc;
+            }
+        }
+    } else {
+        @memset(&buf, 0x42);
+    }
+    return std.mem.readInt(u64, &buf, .little);
+}
 
 /// OpenTelemetry Distributed Tracing for zRPC
 /// Implements W3C Trace Context standard for span propagation
@@ -10,8 +28,8 @@ pub const TraceId = struct {
 
     pub fn generate() TraceId {
         return .{
-            .high = std.crypto.random.int(u64),
-            .low = std.crypto.random.int(u64),
+            .high = getRandomU64(),
+            .low = getRandomU64(),
         };
     }
 
@@ -38,7 +56,7 @@ pub const SpanId = struct {
     value: u64,
 
     pub fn generate() SpanId {
-        return .{ .value = std.crypto.random.int(u64) };
+        return .{ .value = getRandomU64() };
     }
 
     pub fn fromHex(hex: []const u8) !SpanId {

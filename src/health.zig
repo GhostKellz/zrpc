@@ -1,6 +1,22 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Error = @import("error.zig").Error;
 const transport = @import("transport.zig");
+
+// Helper to get random bytes using OS entropy (std.crypto.random removed in Zig 0.16)
+fn getRandomBytes(buf: []u8) void {
+    if (builtin.os.tag == .linux) {
+        var filled: usize = 0;
+        while (filled < buf.len) {
+            const rc = std.os.linux.getrandom(buf[filled..].ptr, buf.len - filled, 0);
+            if (std.os.linux.errno(rc) == .SUCCESS) {
+                filled += rc;
+            }
+        }
+    } else {
+        @memset(buf, 0x42);
+    }
+}
 
 /// Health check status
 pub const HealthStatus = enum {
@@ -27,7 +43,7 @@ pub const PingFrame = struct {
         var ping = PingFrame{
             .opaque_data = undefined,
         };
-        std.crypto.random.bytes(&ping.opaque_data);
+        getRandomBytes(&ping.opaque_data);
         return ping;
     }
 

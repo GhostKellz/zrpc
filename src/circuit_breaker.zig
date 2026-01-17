@@ -5,6 +5,12 @@ const interceptor_mod = @import("interceptor.zig");
 const Interceptor = interceptor_mod.Interceptor;
 const InterceptorContext = interceptor_mod.InterceptorContext;
 
+// Helper for nanosleep (nanosleep removed in Zig 0.16)
+fn nanosleep(sec: i64, nsec: i64) void {
+    const sleep_time = std.posix.timespec{ .sec = @intCast(sec), .nsec = @intCast(nsec) };
+    _ = std.posix.system.nanosleep(&sleep_time, null);
+}
+
 /// Circuit breaker states
 pub const CircuitState = enum {
     closed,      // Normal operation
@@ -384,7 +390,7 @@ test "circuit breaker half-open transition" {
     try std.testing.expectEqual(CircuitState.open, cb.state.load(.acquire));
 
     // Wait for timeout
-    std.posix.nanosleep(0, 150 * 1000 * 1000); // 150ms
+    nanosleep(0, 150 * 1000 * 1000); // 150ms
 
     // Next request should transition to half-open
     try cb.asInterceptor().interceptRequest(&ctx);

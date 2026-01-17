@@ -2,6 +2,103 @@ const std = @import("std");
 const zrpc = @import("zrpc-core");
 const Error = zrpc.Error;
 
+// Helper function to write to a file descriptor using the system call directly
+// (std.posix.write was removed in Zig 0.16)
+fn posixWrite(fd: std.posix.fd_t, data: []const u8) error{NetworkError}!usize {
+    if (data.len == 0) return 0;
+    const max_count: usize = switch (@import("builtin").os.tag) {
+        .linux => 0x7ffff000,
+        else => std.math.maxInt(isize),
+    };
+    while (true) {
+        const rc = std.posix.system.write(fd, data.ptr, @min(data.len, max_count));
+        switch (std.posix.errno(rc)) {
+            .SUCCESS => return @intCast(rc),
+            .INTR => continue,
+            else => return error.NetworkError,
+        }
+    }
+}
+
+// Helper function to delete a file by absolute path
+// (std.fs.deleteFileAbsolute was removed in Zig 0.16)
+fn deleteFileAbsolute(path: []const u8) error{FileNotFound, AccessDenied, Unexpected}!void {
+    const path_c = std.posix.toPosixPath(path) catch return error.Unexpected;
+    while (true) {
+        const rc = std.posix.system.unlinkat(std.posix.AT.FDCWD, &path_c, 0);
+        switch (std.posix.errno(rc)) {
+            .SUCCESS => return,
+            .INTR => continue,
+            .NOENT => return error.FileNotFound,
+            .ACCES, .PERM => return error.AccessDenied,
+            else => return error.Unexpected,
+        }
+    }
+}
+
+// Helper function to create a socket (std.posix.socket was removed in Zig 0.16)
+fn createSocket(domain: u32, socket_type: u32, protocol: u32) error{NetworkError}!std.posix.socket_t {
+    while (true) {
+        const rc = std.posix.system.socket(domain, socket_type, protocol);
+        switch (std.posix.errno(rc)) {
+            .SUCCESS => return @intCast(rc),
+            .INTR => continue,
+            else => return error.NetworkError,
+        }
+    }
+}
+
+// Helper function to connect a socket (std.posix.connect was removed in Zig 0.16)
+const ConnectError = error{
+    ConnectionRefused,
+    FileNotFound,
+    PermissionDenied,
+    NetworkError,
+};
+
+fn connectSocket(sock: std.posix.socket_t, addr: *const std.posix.sockaddr, addrlen: std.posix.socklen_t) ConnectError!void {
+    while (true) {
+        const rc = std.posix.system.connect(sock, addr, addrlen);
+        switch (std.posix.errno(rc)) {
+            .SUCCESS => return,
+            .INTR => continue,
+            .CONNREFUSED => return error.ConnectionRefused,
+            .NOENT => return error.FileNotFound,
+            .ACCES, .PERM => return error.PermissionDenied,
+            else => return error.NetworkError,
+        }
+    }
+}
+
+// Helper function to bind a socket (std.posix.bind was removed in Zig 0.16)
+const BindError = error{
+    AddressInUse,
+    AccessDenied,
+    NetworkError,
+};
+
+fn bindSocket(sock: std.posix.socket_t, addr: *const std.posix.sockaddr, addrlen: std.posix.socklen_t) BindError!void {
+    while (true) {
+        const rc = std.posix.system.bind(sock, addr, addrlen);
+        switch (std.posix.errno(rc)) {
+            .SUCCESS => return,
+            .INTR => continue,
+            .ADDRINUSE => return error.AddressInUse,
+            .ACCES => return error.AccessDenied,
+            else => return error.NetworkError,
+        }
+    }
+}
+
+// Helper function to listen on a socket (std.posix.listen was removed in Zig 0.16)
+fn listenSocket(sock: std.posix.socket_t, backlog: u31) error{NetworkError}!void {
+    const rc = std.posix.system.listen(sock, backlog);
+    switch (std.posix.errno(rc)) {
+        .SUCCESS => return,
+        else => return error.NetworkError,
+    }
+}
+
 // Import legacy transport types from core
 pub const Message = zrpc.transport_legacy.Message;
 pub const Frame = zrpc.transport_legacy.Frame;
@@ -27,7 +124,7 @@ pub const UdsTransport = struct {
         socket_path: []const u8,
     ) Error!UdsConnection {
         // Create Unix socket
-        const sock = std.posix.socket(
+        const sock = createSocket(
             std.posix.AF.UNIX,
             std.posix.SOCK.STREAM,
             0,
@@ -48,7 +145,7 @@ pub const UdsTransport = struct {
         @memcpy(addr.path[0..socket_path.len], socket_path);
 
         // Connect to socket
-        std.posix.connect(
+        connectSocket(
             sock,
             @ptrCast(&addr),
             @sizeOf(@TypeOf(addr)),
@@ -194,7 +291,7 @@ pub const UdsConnection = struct {
     }
 
     pub fn sendPreface(self: *UdsConnection) Error!void {
-        _ = std.posix.write(self.socket, PREFACE) catch return Error.NetworkError;
+        _ = posixWrite(self.socket, PREFACE) catch return Error.NetworkError;
     }
 
     pub fn sendFrame(self: *UdsConnection, frame: Frame) Error!void {
@@ -212,8 +309,8 @@ pub const UdsConnection = struct {
         // Stream ID (32 bits, with reserved bit cleared)
         std.mem.writeInt(u32, frame_header[5..9], frame.stream_id & 0x7FFFFFFF, .big);
 
-        _ = std.posix.write(self.socket, &frame_header) catch return Error.NetworkError;
-        _ = std.posix.write(self.socket, frame.data) catch return Error.NetworkError;
+        _ = posixWrite(self.socket, &frame_header) catch return Error.NetworkError;
+        _ = posixWrite(self.socket, frame.data) catch return Error.NetworkError;
     }
 
     pub fn readFrame(self: *UdsConnection) Error!Frame {
@@ -267,14 +364,14 @@ pub const UdsServer = struct {
     /// Create and bind Unix domain socket server
     pub fn init(allocator: std.mem.Allocator, socket_path: []const u8) Error!UdsServer {
         // Remove existing socket file if it exists
-        std.fs.deleteFileAbsolute(socket_path) catch |err| {
+        deleteFileAbsolute(socket_path) catch |err| {
             if (err != error.FileNotFound) {
                 return Error.InvalidState;
             }
         };
 
         // Create Unix socket
-        const sock = std.posix.socket(
+        const sock = createSocket(
             std.posix.AF.UNIX,
             std.posix.SOCK.STREAM,
             0,
@@ -295,7 +392,7 @@ pub const UdsServer = struct {
         @memcpy(addr.path[0..socket_path.len], socket_path);
 
         // Bind socket
-        std.posix.bind(
+        bindSocket(
             sock,
             @ptrCast(&addr),
             @sizeOf(@TypeOf(addr)),
@@ -309,7 +406,7 @@ pub const UdsServer = struct {
         };
 
         // Listen for connections
-        std.posix.listen(sock, 128) catch {
+        listenSocket(sock, 128) catch {
             std.posix.close(sock);
             return Error.NetworkError;
         };
@@ -324,7 +421,7 @@ pub const UdsServer = struct {
     pub fn deinit(self: *UdsServer) void {
         std.posix.close(self.socket);
         // Clean up socket file
-        std.fs.deleteFileAbsolute(self.socket_path) catch {};
+        deleteFileAbsolute(self.socket_path) catch {};
         self.allocator.free(self.socket_path);
     }
 

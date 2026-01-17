@@ -2,7 +2,25 @@
 //! Implements input validation, sanitization, and security best practices
 
 const std = @import("std");
+const builtin = @import("builtin");
 const transport_interface = @import("transport_interface.zig");
+
+// Helper to get random bytes using OS entropy (std.posix.getrandom removed in Zig 0.16)
+fn getRandomBytes(buf: []u8) bool {
+    if (builtin.os.tag == .linux) {
+        var filled: usize = 0;
+        while (filled < buf.len) {
+            const rc = std.os.linux.getrandom(buf[filled..].ptr, buf.len - filled, 0);
+            if (std.os.linux.errno(rc) == .SUCCESS) {
+                filled += rc;
+            } else {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
 const TransportError = transport_interface.TransportError;
 
 /// Security configuration for zRPC instances
@@ -202,9 +220,9 @@ pub const SecureRandom = struct {
 
     pub fn init() SecureRandom {
         var seed: u64 = undefined;
-        std.posix.getrandom(std.mem.asBytes(&seed)) catch {
+        if (!getRandomBytes(std.mem.asBytes(&seed))) {
             seed = @intCast(std.time.timestamp());
-        };
+        }
 
         return SecureRandom{
             .prng = std.Random.DefaultPrng.init(seed),

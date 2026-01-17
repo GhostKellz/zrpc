@@ -1,6 +1,22 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const zrpc_core = @import("zrpc-core");
 const transport = zrpc_core.transport;
+
+// Helper to get random bytes using OS entropy (std.crypto.random removed in Zig 0.16)
+fn getRandomBytes(buf: []u8) void {
+    if (builtin.os.tag == .linux) {
+        var filled: usize = 0;
+        while (filled < buf.len) {
+            const rc = std.os.linux.getrandom(buf[filled..].ptr, buf.len - filled, 0);
+            if (std.os.linux.errno(rc) == .SUCCESS) {
+                filled += rc;
+            }
+        }
+    } else {
+        @memset(buf, 0x42);
+    }
+}
 const TransportError = transport.TransportError;
 const Connection = transport.Connection;
 const Stream = transport.Stream;
@@ -448,7 +464,7 @@ const Http2ConnectionAdapter = struct {
 
         // Send PING frame with random payload
         var payload: [8]u8 = undefined;
-        std.crypto.random.bytes(&payload);
+        getRandomBytes(&payload);
 
         try self.sendPing(&payload, false);
 

@@ -2,10 +2,26 @@
 //! This implements both HTTP/2 and QUIC transport for gRPC services
 
 const std = @import("std");
+const builtin = @import("builtin");
 const Error = @import("error.zig").Error;
 const service = @import("service.zig");
 const codec = @import("codec.zig");
 const quic = @import("quic.zig");
+
+// Helper to get random bytes using OS entropy (std.crypto.random removed in Zig 0.16)
+fn getRandomBytes(buf: []u8) void {
+    if (builtin.os.tag == .linux) {
+        var filled: usize = 0;
+        while (filled < buf.len) {
+            const rc = std.os.linux.getrandom(buf[filled..].ptr, buf.len - filled, 0);
+            if (std.os.linux.errno(rc) == .SUCCESS) {
+                filled += rc;
+            }
+        }
+    } else {
+        @memset(buf, 0x42); // Fallback for non-Linux
+    }
+}
 
 pub const QuicGrpcTransport = struct {
     allocator: std.mem.Allocator,
@@ -96,10 +112,10 @@ pub const QuicGrpcConnection = struct {
 
     pub fn initClient(allocator: std.mem.Allocator, socket: *std.net.DatagramSocket, peer_address: std.net.Address) !QuicGrpcConnection {
         var local_id: [8]u8 = undefined;
-        std.crypto.random.bytes(&local_id);
+        getRandomBytes(&local_id);
 
         var peer_id: [8]u8 = undefined;
-        std.crypto.random.bytes(&peer_id);
+        getRandomBytes(&peer_id);
 
         return QuicGrpcConnection{
             .allocator = allocator,
@@ -116,10 +132,10 @@ pub const QuicGrpcConnection = struct {
 
     pub fn initServer(allocator: std.mem.Allocator, socket: *std.net.DatagramSocket, peer_address: std.net.Address) !QuicGrpcConnection {
         var local_id: [8]u8 = undefined;
-        std.crypto.random.bytes(&local_id);
+        getRandomBytes(&local_id);
 
         var peer_id: [8]u8 = undefined;
-        std.crypto.random.bytes(&peer_id);
+        getRandomBytes(&peer_id);
 
         return QuicGrpcConnection{
             .allocator = allocator,

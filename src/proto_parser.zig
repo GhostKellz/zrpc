@@ -961,21 +961,23 @@ pub fn parseProtoFile(allocator: std.mem.Allocator, content: []const u8) !ProtoF
 }
 
 pub fn parseProtoFromFile(allocator: std.mem.Allocator, file_path: []const u8) !ProtoFile {
-    const file = try std.fs.cwd().openFile(file_path, .{});
-    defer file.close();
+    // Use posix openat with AT.FDCWD for cwd-relative file access (std.fs.cwd() removed in Zig 0.16)
+    const path_c = try std.posix.toPosixPath(file_path);
+    const fd = std.posix.openat(std.posix.AT.FDCWD, &path_c, .{}, 0) catch return error.FileNotFound;
+    defer std.posix.close(fd);
 
-    const file_size = try file.getEndPos();
-    const content = try allocator.alloc(u8, file_size);
-    defer allocator.free(content);
+    // Read file content into a dynamic buffer (ArrayList is unmanaged in Zig 0.16)
+    var content: std.ArrayList(u8) = .empty;
+    defer content.deinit(allocator);
 
-    // Create IO and reader with proper buffer for file reading
-    var io_threaded = std.Io.Threaded.init_single_threaded;
-    const io = io_threaded.io();
-    var read_buffer: [4096]u8 = undefined;
-    var file_reader = file.reader(io, &read_buffer);
-    try file_reader.interface.readSliceAll(content);
+    var buf: [4096]u8 = undefined;
+    while (true) {
+        const bytes_read = std.posix.read(fd, &buf) catch return error.ReadError;
+        if (bytes_read == 0) break;
+        try content.appendSlice(allocator, buf[0..bytes_read]);
+    }
 
-    return parseProtoFile(allocator, content);
+    return parseProtoFile(allocator, content.items);
 }
 
 // Tests

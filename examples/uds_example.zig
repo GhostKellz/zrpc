@@ -2,6 +2,20 @@ const std = @import("std");
 const zrpc = @import("zrpc-core");
 const uds = @import("zrpc-transport-uds");
 
+// Helper function to delete a file by absolute path
+// (std.fs.deleteFileAbsolute was removed in Zig 0.16)
+fn deleteFileAbsolute(path: []const u8) void {
+    const path_c = std.posix.toPosixPath(path) catch return;
+    while (true) {
+        const rc = std.posix.system.unlinkat(std.posix.AT.FDCWD, &path_c, 0);
+        switch (std.posix.errno(rc)) {
+            .SUCCESS, .NOENT => return,
+            .INTR => continue,
+            else => return,
+        }
+    }
+}
+
 /// Example: Unix Domain Socket transport for high-performance local IPC
 /// Use cases:
 /// - Local service communication (e.g., zeke daemon ↔ zeke CLI)
@@ -21,8 +35,9 @@ pub fn main() !void {
     const server_thread = try std.Thread.spawn(.{}, runServer, .{ allocator, socket_path });
     defer server_thread.join();
 
-    // Give server time to start
-    std.posix.nanosleep(0, 100 * 1000 * 1000); // 100ms
+    // Give server time to start (100ms)
+    const sleep_time = std.posix.timespec{ .sec = 0, .nsec = 100 * 1000 * 1000 };
+    _ = std.posix.system.nanosleep(&sleep_time, null);
 
     // Run client
     try runClient(allocator, socket_path);
@@ -134,7 +149,7 @@ test "UDS transport integration" {
     const socket_path = "/tmp/zrpc-test-integration.sock";
 
     // Clean up any existing socket
-    std.fs.deleteFileAbsolute(socket_path) catch {};
+    deleteFileAbsolute(socket_path);
 
     var server = try uds.UdsServer.init(allocator, socket_path);
     defer server.deinit();

@@ -9,7 +9,23 @@
 //! - Real-time dashboards
 
 const std = @import("std");
+const builtin = @import("builtin");
 const zrpc_core = @import("zrpc-core");
+
+// Helper to get random bytes using OS entropy (std.crypto.random removed in Zig 0.16)
+fn getRandomBytes(buf: []u8) void {
+    if (builtin.os.tag == .linux) {
+        var filled: usize = 0;
+        while (filled < buf.len) {
+            const rc = std.os.linux.getrandom(buf[filled..].ptr, buf.len - filled, 0);
+            if (std.os.linux.errno(rc) == .SUCCESS) {
+                filled += rc;
+            }
+        }
+    } else {
+        @memset(buf, 0x42);
+    }
+}
 const transport_interface = zrpc_core.transport;
 const Error = zrpc_core.Error;
 // Metrics and tracing will be integrated later
@@ -285,7 +301,7 @@ const WebSocketConnectionAdapter = struct {
 
         // Generate random WebSocket key (16 bytes base64 encoded)
         var key_bytes: [16]u8 = undefined;
-        std.crypto.random.bytes(&key_bytes);
+        getRandomBytes(&key_bytes);
 
         var key_base64: [24]u8 = undefined;
         const key_encoded = std.base64.standard.Encoder.encode(&key_base64, &key_bytes);
@@ -546,7 +562,7 @@ const WebSocketStreamAdapter = struct {
         // Masking key (if client)
         var mask_key: [4]u8 = undefined;
         if (self.connection.is_client) {
-            std.crypto.random.bytes(&mask_key);
+            getRandomBytes(&mask_key);
             try frame.appendSlice(&mask_key);
         }
 

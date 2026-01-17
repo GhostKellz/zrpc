@@ -1,6 +1,12 @@
 const std = @import("std");
 const Error = @import("error.zig").Error;
 
+// Helper for nanosleep (nanosleep removed in Zig 0.16)
+fn nanosleep(sec: i64, nsec: i64) void {
+    const sleep_time = std.posix.timespec{ .sec = @intCast(sec), .nsec = @intCast(nsec) };
+    _ = std.posix.system.nanosleep(&sleep_time, null);
+}
+
 pub const TlsVersion = enum {
     tls_1_2,
     tls_1_3,
@@ -85,7 +91,7 @@ pub const TlsConnection = struct {
         }
 
         // Simulate handshake delay (1ms = 1_000_000 ns)
-        std.posix.nanosleep(0, 1_000_000);
+        nanosleep(0, 1_000_000);
 
         self.is_handshake_complete = true;
     }

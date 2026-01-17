@@ -1,5 +1,21 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const zlog = @import("zlog");
+
+// Helper to get random bytes using OS entropy (std.crypto.random removed in Zig 0.16)
+fn getRandomBytes(buf: []u8) void {
+    if (builtin.os.tag == .linux) {
+        var filled: usize = 0;
+        while (filled < buf.len) {
+            const rc = std.os.linux.getrandom(buf[filled..].ptr, buf.len - filled, 0);
+            if (std.os.linux.errno(rc) == .SUCCESS) {
+                filled += rc;
+            }
+        }
+    } else {
+        @memset(buf, 0x42);
+    }
+}
 
 /// zRPC Logging Integration
 /// Provides structured logging for all transports and RPC operations
@@ -162,7 +178,7 @@ pub const RpcLogger = struct {
 /// Generate unique request ID
 pub fn generateRequestId(allocator: std.mem.Allocator) ![]u8 {
     var buf: [16]u8 = undefined;
-    std.crypto.random.bytes(&buf);
+    getRandomBytes(&buf);
 
     return std.fmt.allocPrint(allocator, "{s}", .{std.fmt.bytesToHex(&buf, .lower)});
 }

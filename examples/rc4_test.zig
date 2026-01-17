@@ -2,6 +2,15 @@ const std = @import("std");
 const zrpc = @import("zrpc-core");
 const zrq = @import("zrpc-transport-quic");
 
+// Helper function for nanosleep (nanosleep was removed in Zig 0.16)
+fn nanosleep(sec: i64, nsec: i64) void {
+    const sleep_time = std.posix.timespec{
+        .sec = @intCast(sec),
+        .nsec = @intCast(nsec),
+    };
+    _ = std.posix.system.nanosleep(&sleep_time, null);
+}
+
 /// RC-4: Stress Testing and Edge Case Handling
 /// This test suite validates:
 /// 1. High connection count testing (10k+ concurrent)
@@ -61,7 +70,7 @@ fn testHighConnectionCount(allocator: std.mem.Allocator) !void {
         }
 
         // Brief pause between batches
-        std.posix.nanosleep(0, 10 * 1000 * 1000); // 10ms
+        nanosleep(0, 10 * 1000 * 1000); // 10ms
     }
 
     std.debug.print("  ✓ Created {d} concurrent connections\n", .{connections.items.len});
@@ -98,7 +107,7 @@ fn testLongRunningStability(allocator: std.mem.Allocator) !void {
     var failures: usize = 0;
 
     while (elapsed_ms < test_duration_ms) {
-        std.posix.nanosleep(0, check_interval_ms * 1000 * 1000);
+        nanosleep(0, check_interval_ms * 1000 * 1000);
         elapsed_ms += check_interval_ms;
         checks += 1;
 
@@ -228,7 +237,7 @@ fn testNetworkPartitionScenarios(allocator: std.mem.Allocator) !void {
     std.debug.print("  ✓ Simulated network partition\n", .{});
 
     // Wait for partition detection
-    std.posix.nanosleep(0, 100 * 1000 * 1000); // 100ms
+    nanosleep(0, 100 * 1000 * 1000); // 100ms
 
     if (!conn.hasDetectedPartition()) {
         return error.PartitionNotDetected;
@@ -237,7 +246,7 @@ fn testNetworkPartitionScenarios(allocator: std.mem.Allocator) !void {
 
     // Heal partition
     conn.healNetworkPartition();
-    std.posix.nanosleep(0, 100 * 1000 * 1000); // 100ms
+    nanosleep(0, 100 * 1000 * 1000); // 100ms
 
     if (!conn.isHealthy()) {
         return error.PartitionRecoveryFailed;
@@ -263,7 +272,7 @@ fn testRapidConnectDisconnect(allocator: std.mem.Allocator) !void {
 
         // Minimal delay
         if (i % 100 == 0) {
-            std.posix.nanosleep(0, 1 * 1000 * 1000); // 1ms
+            nanosleep(0, 1 * 1000 * 1000); // 1ms
         }
     }
 

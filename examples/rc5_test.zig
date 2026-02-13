@@ -4,17 +4,24 @@ const zrq = @import("zrpc-transport-quic");
 
 // Helper function for nanosleep (std.posix.nanosleep was removed in Zig 0.16)
 fn nanosleep(sec: i64, nsec: i64) void {
-    const sleep_time = std.posix.timespec{
+    const sleep_time = std.c.timespec{
         .sec = @intCast(sec),
         .nsec = @intCast(nsec),
     };
-    _ = std.posix.system.nanosleep(&sleep_time, null);
+    _ = std.c.nanosleep(&sleep_time, null);
 }
 
 // Simple PRNG for test jitter (std.crypto.random was removed in Zig 0.16)
 var test_prng: std.Random.DefaultPrng = std.Random.DefaultPrng.init(0x853c49e6748fea9b);
 fn getTestRandom() std.Random {
     return test_prng.random();
+}
+
+/// Get current monotonic timestamp in nanoseconds (Zig 0.16 compatible)
+fn getMonotonicNs() i128 {
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(std.c.CLOCK.MONOTONIC, &ts);
+    return @as(i128, ts.sec) * std.time.ns_per_s + ts.nsec;
 }
 
 /// RC-5: Final Validation and Release Preparation
@@ -219,8 +226,7 @@ fn benchmarkUnaryRPC(allocator: std.mem.Allocator, iterations: usize) !LatencySt
     defer allocator.free(latencies);
 
     for (0..iterations) |i| {
-        const start_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-        const start: i128 = @as(i128, start_ts.sec) * std.time.ns_per_s + start_ts.nsec;
+        const start = getMonotonicNs();
 
         const req = TestRequest{
             .id = i,
@@ -229,8 +235,7 @@ fn benchmarkUnaryRPC(allocator: std.mem.Allocator, iterations: usize) !LatencySt
         };
         _ = try client.callUnary("Bench/Method", req);
 
-        const end_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-        const end: i128 = @as(i128, end_ts.sec) * std.time.ns_per_s + end_ts.nsec;
+        const end = getMonotonicNs();
         latencies[i] = @intCast(@divTrunc(end - start, 1000)); // Convert to microseconds
     }
 
@@ -248,8 +253,7 @@ fn benchmarkThroughput(allocator: std.mem.Allocator, iterations: usize) !u64 {
     var client = MockClient.init(allocator);
     defer client.deinit();
 
-    const start_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-    const start: i128 = @as(i128, start_ts.sec) * std.time.ns_per_s + start_ts.nsec;
+    const start = getMonotonicNs();
 
     for (0..iterations) |i| {
         const req = TestRequest{
@@ -260,8 +264,7 @@ fn benchmarkThroughput(allocator: std.mem.Allocator, iterations: usize) !u64 {
         _ = try client.callUnary("Bench/Throughput", req);
     }
 
-    const end_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-    const end: i128 = @as(i128, end_ts.sec) * std.time.ns_per_s + end_ts.nsec;
+    const end = getMonotonicNs();
     const elapsed_sec = @as(f64, @floatFromInt(end - start)) / 1_000_000_000.0;
 
     return @intFromFloat(@as(f64, @floatFromInt(iterations)) / elapsed_sec);
@@ -271,8 +274,7 @@ fn benchmarkStreamingThroughput(allocator: std.mem.Allocator, iterations: usize)
     var client = MockClient.init(allocator);
     defer client.deinit();
 
-    const start_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-    const start: i128 = @as(i128, start_ts.sec) * std.time.ns_per_s + start_ts.nsec;
+    const start = getMonotonicNs();
 
     var stream = try client.openBidiStream("Bench/Stream");
     defer stream.close();
@@ -281,8 +283,7 @@ fn benchmarkStreamingThroughput(allocator: std.mem.Allocator, iterations: usize)
         try stream.send(TestMessage{ .seq = i, .data = "bench" });
     }
 
-    const end_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-    const end: i128 = @as(i128, end_ts.sec) * std.time.ns_per_s + end_ts.nsec;
+    const end = getMonotonicNs();
     const elapsed_sec = @as(f64, @floatFromInt(end - start)) / 1_000_000_000.0;
 
     return @intFromFloat(@as(f64, @floatFromInt(iterations)) / elapsed_sec);
@@ -488,8 +489,7 @@ const ResourceProfiler = struct {
     }
 
     fn startProfiling(self: *ResourceProfiler) void {
-        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-        self.start_time = @as(i128, ts.sec) * std.time.ns_per_s + ts.nsec;
+        self.start_time = getMonotonicNs();
     }
 
     fn stopProfiling(_: *ResourceProfiler) ResourceStats {

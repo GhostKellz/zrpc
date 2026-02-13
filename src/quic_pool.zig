@@ -4,10 +4,37 @@ const std = @import("std");
 const quic = @import("quic.zig");
 const Error = @import("error.zig").Error;
 
-/// Get current Unix timestamp in seconds using posix clock_gettime
+/// Get current Unix timestamp in seconds (Zig 0.16 compatible)
 fn getTimestamp() i64 {
-    const ts = std.posix.clock_gettime(.REALTIME) catch return 0;
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(std.c.CLOCK.REALTIME, &ts);
     return ts.sec;
+}
+
+/// Simple blocking mutex wrapper for Zig 0.16 (std.Thread.Mutex was removed)
+const Mutex = struct {
+    inner: std.atomic.Mutex = .unlocked,
+
+    pub fn lock(self: *Mutex) void {
+        while (!self.inner.tryLock()) {
+            std.atomic.spinLoopHint();
+        }
+    }
+
+    pub fn unlock(self: *Mutex) void {
+        self.inner.unlock();
+    }
+};
+
+/// Simple PRNG for load balancing (std.crypto.random was removed in Zig 0.16)
+var pool_prng: ?std.Random.DefaultPrng = null;
+fn getPoolRandom() std.Random {
+    if (pool_prng == null) {
+        // Seed with timestamp for simplicity
+        const seed: u64 = @bitCast(getTimestamp() *% 0x853c49e6748fea9b);
+        pool_prng = std.Random.DefaultPrng.init(seed);
+    }
+    return pool_prng.?.random();
 }
 
 // Connection pool statistics
@@ -125,7 +152,7 @@ pub const QuicConnectionPool = struct {
     endpoint_connections: std.StringHashMap(std.ArrayList(*PooledConnection)),
     round_robin_counters: std.StringHashMap(u32),
     stats: PoolStats,
-    mutex: std.Thread.Mutex,
+    mutex: Mutex,
 
     pub fn init(allocator: std.mem.Allocator, config: PoolConfig) QuicConnectionPool {
         return QuicConnectionPool{
@@ -135,7 +162,7 @@ pub const QuicConnectionPool = struct {
             .endpoint_connections = std.StringHashMap(std.ArrayList(*PooledConnection)).init(allocator),
             .round_robin_counters = std.StringHashMap(u32).init(allocator),
             .stats = PoolStats.init(),
-            .mutex = std.Thread.Mutex{},
+            .mutex = .{},
         };
     }
 
@@ -250,7 +277,7 @@ pub const QuicConnectionPool = struct {
                 return best_conn;
             },
             .random => {
-                var rng = std.crypto.random;
+                const rng = getPoolRandom();
                 const index = rng.intRangeLessThan(usize, 0, connections.len);
                 return connections[index];
             },
@@ -263,7 +290,7 @@ pub const QuicConnectionPool = struct {
                     total_weight += weight;
                 }
 
-                var rng = std.crypto.random;
+                const rng = getPoolRandom();
                 var random_weight = rng.intRangeLessThan(u64, 0, total_weight);
 
                 for (connections) |conn| {

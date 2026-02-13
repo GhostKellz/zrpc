@@ -4,6 +4,13 @@
 const std = @import("std");
 
 const Client = @import("core/client.zig").Client;
+
+/// Get current monotonic timestamp in nanoseconds (Zig 0.16 compatible)
+fn getMonotonicNs() i128 {
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(std.c.CLOCK.MONOTONIC, &ts);
+    return @as(i128, ts.sec) * std.time.ns_per_s + ts.nsec;
+}
 const Server = @import("core/server.zig").Server;
 const transport_interface = @import("transport_interface.zig");
 const Transport = transport_interface.Transport;
@@ -138,8 +145,7 @@ pub const BenchmarkRunner = struct {
         defer latency_tracker.deinit();
 
         self.allocation_tracker.reset();
-        const start_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-        const start_time: i128 = @as(i128, start_ts.sec) * std.time.ns_per_s + start_ts.nsec;
+        const start_time = getMonotonicNs();
 
         // Warmup
         for (0..self.config.warmup_iterations) |_| {
@@ -148,19 +154,16 @@ pub const BenchmarkRunner = struct {
 
         // Main benchmark
         for (0..self.config.iterations) |_| {
-            const call_start_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-            const call_start: i128 = @as(i128, call_start_ts.sec) * std.time.ns_per_s + call_start_ts.nsec;
+            const call_start = getMonotonicNs();
 
             const response = client.call("BenchmarkService/Echo", payload) catch continue;
             self.allocator.free(response);
 
-            const call_end_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-            const call_end: i128 = @as(i128, call_end_ts.sec) * std.time.ns_per_s + call_end_ts.nsec;
+            const call_end = getMonotonicNs();
             try latency_tracker.record(@intCast(call_end - call_start));
         }
 
-        const end_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-        const end_time: i128 = @as(i128, end_ts.sec) * std.time.ns_per_s + end_ts.nsec;
+        const end_time = getMonotonicNs();
         const duration_s = @as(f64, @floatFromInt(end_time - start_time)) / 1_000_000_000.0;
 
         const percentiles = latency_tracker.calculatePercentiles();
@@ -205,24 +208,20 @@ pub const BenchmarkRunner = struct {
         @memset(chunk, 'S');
 
         self.allocation_tracker.reset();
-        const start_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-        const start_time: i128 = @as(i128, start_ts.sec) * std.time.ns_per_s + start_ts.nsec;
+        const start_time = getMonotonicNs();
 
         // Simplified streaming simulation
         for (0..self.config.streaming_count) |_| {
-            const call_start_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-            const call_start: i128 = @as(i128, call_start_ts.sec) * std.time.ns_per_s + call_start_ts.nsec;
+            const call_start = getMonotonicNs();
 
             const response = client.call("BenchmarkService/StreamEcho", chunk) catch continue;
             self.allocator.free(response);
 
-            const call_end_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-            const call_end: i128 = @as(i128, call_end_ts.sec) * std.time.ns_per_s + call_end_ts.nsec;
+            const call_end = getMonotonicNs();
             try latency_tracker.record(@intCast(call_end - call_start));
         }
 
-        const end_ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-        const end_time: i128 = @as(i128, end_ts.sec) * std.time.ns_per_s + end_ts.nsec;
+        const end_time = getMonotonicNs();
         const duration_s = @as(f64, @floatFromInt(end_time - start_time)) / 1_000_000_000.0;
 
         const percentiles = latency_tracker.calculatePercentiles();

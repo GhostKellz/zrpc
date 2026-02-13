@@ -1,8 +1,10 @@
 .zig-cache/
 zig-out/
+zig-pkg/
 *.o
 *.exe
 CLAUDE.md
 TODO.md
 ROADMAP.md
 archive/
+uds_example

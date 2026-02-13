@@ -5,6 +5,13 @@ const builtin = @import("builtin");
 const Error = @import("error.zig").Error;
 const tls = @import("tls.zig");
 
+/// Get current realtime timestamp in seconds (Zig 0.16 compatible)
+fn getRealtimeSec() i64 {
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(std.c.CLOCK.REALTIME, &ts);
+    return ts.sec;
+}
+
 // Helper to get random bytes using OS entropy (std.crypto.random removed in Zig 0.16)
 fn getRandomBytes(buf: []u8) void {
     if (builtin.os.tag == .linux) {
@@ -132,8 +139,7 @@ pub const SessionTicket = struct {
         const owned_ticket = try allocator.dupe(u8, ticket_data);
         const owned_alpn = try allocator.dupe(u8, "h3"); // HTTP/3 for gRPC
 
-        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-        const creation_time: i64 = @intCast(ts.sec);
+        const creation_time = getRealtimeSec();
         return SessionTicket{
             .ticket_data = owned_ticket,
             .early_data_limit = early_data_limit,
@@ -150,8 +156,7 @@ pub const SessionTicket = struct {
     }
 
     pub fn isValid(self: *const SessionTicket) bool {
-        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-        const current_time: i64 = @intCast(ts.sec);
+        const current_time = getRealtimeSec();
         const max_age = 7 * 24 * 60 * 60; // 7 days in seconds
         return (current_time - self.creation_time) < max_age;
     }
@@ -274,8 +279,7 @@ pub const NetworkPath = struct {
     }
 
     pub fn needsValidation(self: *const NetworkPath) bool {
-        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-        const current_time: i64 = @intCast(ts.sec);
+        const current_time = getRealtimeSec();
         const validation_timeout = 60; // 1 minute
         return !self.validated or
                (current_time - self.last_validation) > validation_timeout;
@@ -285,8 +289,7 @@ pub const NetworkPath = struct {
         var challenge: [8]u8 = undefined;
         getRandomBytes(&challenge);
         self.challenge_data = challenge;
-        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-        self.last_validation = @intCast(ts.sec);
+        self.last_validation = getRealtimeSec();
     }
 };
 
@@ -834,8 +837,7 @@ pub const QuicConnection = struct {
             if (path.challenge_data) |challenge| {
                 if (std.mem.eql(u8, &challenge, &response_data)) {
                     path.validated = true;
-                    const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-                    path.last_validation = @intCast(ts.sec);
+                    path.last_validation = getRealtimeSec();
 
                     // If this was the primary path, migration is complete
                     if (self.migration_context.primary_path == path) {

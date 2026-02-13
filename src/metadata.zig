@@ -1,6 +1,13 @@
 const std = @import("std");
 const Error = @import("error.zig").Error;
 
+/// Get current realtime timestamp in nanoseconds (Zig 0.16 compatible)
+fn getRealtimeNs() i64 {
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(std.c.CLOCK.REALTIME, &ts);
+    return @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
+}
+
 /// gRPC Metadata for request/response headers
 /// Supports both binary and ASCII metadata values
 /// Compatible with gRPC wire format
@@ -234,16 +241,14 @@ pub const Context = struct {
 
     /// Create context with timeout (relative to now)
     pub fn withTimeout(allocator: std.mem.Allocator, timeout_ns: u64) Context {
-        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-        const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
+        const now = getRealtimeNs();
         return withDeadline(allocator, now + @as(i64, @intCast(timeout_ns)));
     }
 
     /// Check if deadline has been exceeded
     pub fn isDeadlineExceeded(self: *const Context) bool {
         if (self.deadline) |dl| {
-            const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-            const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
+            const now = getRealtimeNs();
             return now >= dl;
         }
         return false;
@@ -252,8 +257,7 @@ pub const Context = struct {
     /// Get remaining time until deadline
     pub fn getRemainingTime(self: *const Context) ?u64 {
         if (self.deadline) |dl| {
-            const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-            const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
+            const now = getRealtimeNs();
             if (now >= dl) return 0;
             return @intCast(dl - now);
         }
@@ -346,8 +350,7 @@ test "timeout formatting" {
 test "context with deadline" {
     const allocator = std.testing.allocator;
 
-    const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-    const now: i64 = @as(i64, @intCast(@as(i128, ts.sec) * std.time.ns_per_s + ts.nsec));
+    const now = getRealtimeNs();
     const future_deadline: i64 = now + (10 * std.time.ns_per_s);
     var ctx = Context.withDeadline(allocator, future_deadline);
     defer ctx.deinit();

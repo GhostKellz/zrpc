@@ -3,6 +3,13 @@
 const std = @import("std");
 const Error = @import("error.zig").Error;
 
+/// Get current realtime timestamp in seconds (Zig 0.16 compatible)
+fn getRealtimeSec() i64 {
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(std.c.CLOCK.REALTIME, &ts);
+    return ts.sec;
+}
+
 fn jsonAppendComma(buffer: *std.ArrayList(u8), allocator: std.mem.Allocator, first: *bool) !void {
     if (first.*) {
         first.* = false;
@@ -242,28 +249,24 @@ pub const JwtClaims = struct {
     }
 
     pub fn setExpiration(self: *JwtClaims, seconds_from_now: i64) void {
-        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-        const now_sec: i64 = @intCast(ts.sec);
+        const now_sec = getRealtimeSec();
         self.exp = now_sec + seconds_from_now;
     }
 
     pub fn setIssuedNow(self: *JwtClaims) void {
-        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-        self.iat = @intCast(ts.sec);
+        self.iat = getRealtimeSec();
     }
 
     pub fn isExpired(self: *const JwtClaims) bool {
         if (self.exp) |exp| {
-            const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-            const now_sec: i64 = @intCast(ts.sec);
+            const now_sec = getRealtimeSec();
             return now_sec > exp;
         }
         return false;
     }
 
     pub fn isValidNow(self: *const JwtClaims) bool {
-        const ts = std.posix.clock_gettime(std.posix.CLOCK.REALTIME) catch unreachable;
-        const now: i64 = @intCast(ts.sec);
+        const now = getRealtimeSec();
 
         if (self.exp) |exp| {
             if (now > exp) return false;

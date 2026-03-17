@@ -964,7 +964,7 @@ pub fn parseProtoFromFile(allocator: std.mem.Allocator, file_path: []const u8) !
     // Use posix openat with AT.FDCWD for cwd-relative file access (std.fs.cwd() removed in Zig 0.16)
     const path_c = try std.posix.toPosixPath(file_path);
     const fd = std.posix.openat(std.posix.AT.FDCWD, &path_c, .{}, 0) catch return error.FileNotFound;
-    defer std.posix.close(fd);
+    defer std.Io.Threaded.closeFd(fd);
 
     // Read file content into a dynamic buffer (ArrayList is unmanaged in Zig 0.16)
     var content: std.ArrayList(u8) = .empty;

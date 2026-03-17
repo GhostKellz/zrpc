@@ -25,7 +25,8 @@
     .fingerprint = 0x89376ace6fe2656f, // Changing this has security and trust implications.
     // Tracks the earliest Zig version that the package considers to be a
     // supported use case.
-    .minimum_zig_version = "0.16.0-dev.2535+b5bd49460",
+    .minimum_zig_version = "0.16.0-dev.2736+3b515fbed",
+
     // This field is optional.
     // Each dependency must either provide a `url` and `hash`, or a `path`.
     // `zig build --fetch` can be used to fetch all dependencies of a package, recursively.
@@ -34,15 +35,15 @@
     .dependencies = .{
         .zquic = .{
             .url = "https://github.com/ghostkellz/zquic/archive/main.tar.gz",
-            .hash = "zquic-0.9.6-2rPdsy6YEgBJDrdH6coqjutlhvTM2TKXV10leu9w_0Yy",
+            .hash = "zquic-0.9.7-2rPds16YEgClc3zU6fYv2CVtCLLK7a4O3ixOrdQ4cqfE",
         },
         .zlog = .{
             .url = "https://github.com/ghostkellz/zlog/archive/main.tar.gz",
-            .hash = "zlog-0.1.4-kS0sWBoECQDzyXRS7L7Swea0U_0gC5Mbl40T2bPKcM-g",
+            .hash = "zlog-0.1.4-kS0sWCoECQADgUPjxOtdfajejhSeQ4IyW0SYn88wvkc6",
         },
         .zpack = .{
             .url = "https://github.com/ghostkellz/zpack/archive/main.tar.gz",
-            .hash = "zpack-0.3.5-_6t6JopMCgDIrYU3jEgrxEDZjgIShgZSoVOvy3w2dQVU",
+            .hash = "zpack-0.3.5-_6t6JopMCgAuIE1dT5dwoMgqlPB3dojP6Z5wSVtW90Wr",
         },
         .zdoc = .{
             .url = "https://github.com/ghostkellz/zdoc/archive/main.tar.gz",
@@ -50,7 +51,7 @@
         },
         .zsync = .{
             .url = "https://github.com/ghostkellz/zsync/archive/main.tar.gz",
-            .hash = "zsync-0.7.5-KAuhedbyFgA-4HLXM_afdk2aM0bQl45kmOKuUvCVl6p0",
+            .hash = "zsync-0.7.7-KAuhefiZGACgJRl7uJ1tvJrU9w74XtShEKyZun1ue0uJ",
         },
     },
     .paths = .{

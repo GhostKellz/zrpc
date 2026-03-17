@@ -129,7 +129,7 @@ pub const UdsTransport = struct {
             std.posix.SOCK.STREAM,
             0,
         ) catch return Error.NetworkError;
-        errdefer std.posix.close(sock);
+        errdefer std.Io.Threaded.closeFd(sock);
 
         // Build sockaddr_un
         var addr = std.posix.sockaddr.un{
@@ -150,7 +150,7 @@ pub const UdsTransport = struct {
             @ptrCast(&addr),
             @sizeOf(@TypeOf(addr)),
         ) catch |err| {
-            std.posix.close(sock);
+            std.Io.Threaded.closeFd(sock);
             return switch (err) {
                 error.ConnectionRefused => Error.Unavailable,
                 error.FileNotFound => Error.NotFound,
@@ -287,7 +287,7 @@ pub const UdsConnection = struct {
     const PREFACE = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
 
     pub fn close(self: *UdsConnection) void {
-        std.posix.close(self.socket);
+        std.Io.Threaded.closeFd(self.socket);
     }
 
     pub fn sendPreface(self: *UdsConnection) Error!void {
@@ -376,7 +376,7 @@ pub const UdsServer = struct {
             std.posix.SOCK.STREAM,
             0,
         ) catch return Error.NetworkError;
-        errdefer std.posix.close(sock);
+        errdefer std.Io.Threaded.closeFd(sock);
 
         // Build sockaddr_un
         var addr = std.posix.sockaddr.un{
@@ -397,7 +397,7 @@ pub const UdsServer = struct {
             @ptrCast(&addr),
             @sizeOf(@TypeOf(addr)),
         ) catch |err| {
-            std.posix.close(sock);
+            std.Io.Threaded.closeFd(sock);
             return switch (err) {
                 error.AddressInUse => Error.AlreadyExists,
                 error.AccessDenied => Error.PermissionDenied,
@@ -407,7 +407,7 @@ pub const UdsServer = struct {
 
         // Listen for connections
         listenSocket(sock, 128) catch {
-            std.posix.close(sock);
+            std.Io.Threaded.closeFd(sock);
             return Error.NetworkError;
         };
 
@@ -419,7 +419,7 @@ pub const UdsServer = struct {
     }
 
     pub fn deinit(self: *UdsServer) void {
-        std.posix.close(self.socket);
+        std.Io.Threaded.closeFd(self.socket);
         // Clean up socket file
         deleteFileAbsolute(self.socket_path) catch {};
         self.allocator.free(self.socket_path);

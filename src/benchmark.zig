@@ -64,7 +64,7 @@ pub const LatencyTracker = struct {
 
     pub fn init(allocator: std.mem.Allocator) LatencyTracker {
         return LatencyTracker{
-            .samples = std.ArrayList(u64){},
+            .samples = .empty,
             .allocator = allocator,
         };
     }

@@ -148,7 +148,7 @@ const QuicConnectionAdapter = struct {
             .quic_stream = quic_stream,
             .allocator = self.allocator,
             .stream_id = self.next_stream_id,
-            .frame_buffer = std.ArrayList(u8){},
+            .frame_buffer = std.ArrayList(u8).empty,
         };
 
         // Track the stream
@@ -265,7 +265,7 @@ const QuicStreamAdapter = struct {
         const self: *QuicStreamAdapter = @ptrCast(@alignCast(ptr));
 
         // Map RPC frame to QUIC stream data
-        var frame_data = std.ArrayList(u8){};
+        var frame_data = std.ArrayList(u8).empty;
         defer frame_data.deinit();
 
         // Simple framing: [frame_type(1)][flags(1)][length(4)][data]

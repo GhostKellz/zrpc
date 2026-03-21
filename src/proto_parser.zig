@@ -21,11 +21,11 @@ pub const ProtoFile = struct {
             .syntax = "proto3",
             .syntax_allocated = false,
             .package = null,
-            .imports = std.ArrayList([]const u8){},
+            .imports = .empty,
             .options = std.StringHashMap([]const u8).init(allocator),
-            .messages = std.ArrayList(MessageDef){},
-            .enums = std.ArrayList(EnumDef){},
-            .services = std.ArrayList(ServiceDef){},
+            .messages = .empty,
+            .enums = .empty,
+            .services = .empty,
             .allocator = allocator,
         };
     }
@@ -162,9 +162,9 @@ pub const MessageDef = struct {
     pub fn init(allocator: std.mem.Allocator, name: []const u8) !MessageDef {
         return MessageDef{
             .name = try allocator.dupe(u8, name),
-            .fields = std.ArrayList(FieldDef){},
-            .nested_messages = std.ArrayList(MessageDef){},
-            .nested_enums = std.ArrayList(EnumDef){},
+            .fields = .empty,
+            .nested_messages = .empty,
+            .nested_enums = .empty,
             .options = std.StringHashMap([]const u8).init(allocator),
             .allocator = allocator,
         };
@@ -233,7 +233,7 @@ pub const EnumDef = struct {
     pub fn init(allocator: std.mem.Allocator, name: []const u8) !EnumDef {
         return EnumDef{
             .name = try allocator.dupe(u8, name),
-            .values = std.ArrayList(EnumValueDef){},
+            .values = .empty,
             .options = std.StringHashMap([]const u8).init(allocator),
             .allocator = allocator,
         };
@@ -300,7 +300,7 @@ pub const ServiceDef = struct {
     pub fn init(allocator: std.mem.Allocator, name: []const u8) !ServiceDef {
         return ServiceDef{
             .name = try allocator.dupe(u8, name),
-            .methods = std.ArrayList(MethodDef){},
+            .methods = .empty,
             .options = std.StringHashMap([]const u8).init(allocator),
             .allocator = allocator,
         };

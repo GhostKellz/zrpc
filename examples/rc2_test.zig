@@ -10,9 +10,9 @@ const BenchmarkRunner = zrpc_core.benchmark.BenchmarkRunner;
 const BenchmarkConfig = zrpc_core.benchmark.BenchmarkConfig;
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true }){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    defer _ = debug_allocator.deinit();
+    const allocator = debug_allocator.allocator();
 
     std.log.info("🎖️  RC-2 Test Suite: Security & Performance Hardening", .{});
     std.log.info("===========================================================", .{});

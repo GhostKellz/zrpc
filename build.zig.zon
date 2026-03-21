@@ -25,7 +25,7 @@
     .fingerprint = 0x89376ace6fe2656f, // Changing this has security and trust implications.
     // Tracks the earliest Zig version that the package considers to be a
     // supported use case.
-    .minimum_zig_version = "0.16.0-dev.2736+3b515fbed",
+    .minimum_zig_version = "0.16.0-dev.2960+ce1f7136a",
 
     // This field is optional.
     // Each dependency must either provide a `url` and `hash`, or a `path`.
@@ -50,8 +50,8 @@
             .hash = "zdoc-0.1.2-ARcu6xZ0AgBZuhISiEzAPShFHChM5pxTkp1Rh1xQhoF-",
         },
         .zsync = .{
-            .url = "https://github.com/ghostkellz/zsync/archive/main.tar.gz",
-            .hash = "zsync-0.7.7-KAuhefiZGACgJRl7uJ1tvJrU9w74XtShEKyZun1ue0uJ",
+            .url = "https://github.com/ghostkellz/zsync/archive/refs/tags/v0.7.8.tar.gz",
+            .hash = "zsync-0.7.8-KAuheQufGABcQSjcE59uKuXJtH8PNSe39fxrTiFlsTYl",
         },
     },
     .paths = .{

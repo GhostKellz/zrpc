@@ -216,8 +216,8 @@ const MockStreamAdapter = struct {
         return MockStreamAdapter{
             .allocator = allocator,
             .stream_id = stream_id,
-            .data_buffer = std.ArrayList(u8){},
-            .frames_to_read = std.ArrayList(Frame){},
+            .data_buffer = .empty,
+            .frames_to_read = .empty,
         };
     }
 };

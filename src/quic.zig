@@ -227,7 +227,7 @@ pub const MigrationContext = struct {
 
     pub fn init(allocator: std.mem.Allocator) MigrationContext {
         return MigrationContext{
-            .active_paths = std.ArrayList(NetworkPath){},
+            .active_paths = .empty,
             .primary_path = null,
             .probing_paths = std.AutoHashMap(u64, *NetworkPath).init(allocator),
             .path_validation_in_progress = false,
@@ -321,7 +321,7 @@ pub const QuicPacket = struct {
     }
 
     pub fn encode(self: *const QuicPacket, allocator: std.mem.Allocator) ![]u8 {
-        var buffer = std.ArrayList(u8){};
+        var buffer = std.ArrayList(u8).empty;
         defer buffer.deinit(allocator);
 
         // Form byte (packet type + version flag)
@@ -408,7 +408,7 @@ pub const QuicFrame = struct {
     }
 
     pub fn encode(self: *const QuicFrame, allocator: std.mem.Allocator) ![]u8 {
-        var buffer = std.ArrayList(u8){};
+        var buffer = std.ArrayList(u8).empty;
         defer buffer.deinit(allocator);
 
         // Frame type
@@ -512,8 +512,8 @@ pub const QuicStream = struct {
             .state = .idle,
             .send_offset = 0,
             .recv_offset = 0,
-            .send_buffer = std.ArrayList(u8){},
-            .recv_buffer = std.ArrayList(u8){},
+            .send_buffer = std.ArrayList(u8).empty,
+            .recv_buffer = std.ArrayList(u8).empty,
             .allocator = allocator,
         };
     }
@@ -895,7 +895,7 @@ test "connection id creation" {
 }
 
 test "variable length integer encoding" {
-    var buffer = std.ArrayList(u8){};
+    var buffer = std.ArrayList(u8).empty;
     defer buffer.deinit(std.testing.allocator);
 
     try encodeVarInt(std.testing.allocator, &buffer, 42);

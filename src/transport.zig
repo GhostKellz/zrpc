@@ -401,7 +401,7 @@ pub const QuicTransport = struct {
         // Build gRPC-over-HTTP/3 message
         const method = message.headers.get("grpc-method") orelse "Unknown/Method";
 
-        var grpc_message = std.ArrayList(u8){};
+        var grpc_message = std.ArrayList(u8).empty;
         defer grpc_message.deinit(self.allocator);
 
         // HTTP/3 headers frame (simplified)

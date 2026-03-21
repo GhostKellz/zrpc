@@ -163,7 +163,7 @@ pub const QuicGrpcConnection = struct {
         if (self.state != .initial) return;
 
         // Send initial handshake packet
-        var packet_data = std.ArrayList(u8){};
+        var packet_data = std.ArrayList(u8).empty;
         defer packet_data.deinit(self.allocator);
 
         // QUIC packet header with connection IDs
@@ -254,8 +254,8 @@ pub const GrpcStream = struct {
             .allocator = allocator,
             .id = stream_id,
             .state = .idle,
-            .send_buffer = std.ArrayList(u8){},
-            .recv_buffer = std.ArrayList(u8){},
+            .send_buffer = std.ArrayList(u8).empty,
+            .recv_buffer = std.ArrayList(u8).empty,
             .connection = null,
         };
     }
@@ -269,7 +269,7 @@ pub const GrpcStream = struct {
         if (self.connection == null) return Error.InvalidState;
 
         // Build gRPC-over-QUIC message
-        var grpc_data = std.ArrayList(u8){};
+        var grpc_data = std.ArrayList(u8).empty;
         defer grpc_data.deinit(self.allocator);
 
         // gRPC-Web style headers (simplified)
@@ -288,7 +288,7 @@ pub const GrpcStream = struct {
         try grpc_data.appendSlice(self.allocator, message);
 
         // Create QUIC packet with stream data
-        var packet = std.ArrayList(u8){};
+        var packet = std.ArrayList(u8).empty;
         defer packet.deinit(self.allocator);
 
         // QUIC header (simplified)
@@ -335,7 +335,7 @@ pub const GrpcStream = struct {
         if (self.connection == null) return Error.InvalidState;
 
         // Build streaming gRPC message
-        var grpc_data = std.ArrayList(u8){};
+        var grpc_data = std.ArrayList(u8).empty;
         defer grpc_data.deinit(self.allocator);
 
         // gRPC message framing for streaming
@@ -382,7 +382,7 @@ pub const GrpcStream = struct {
     }
 
     fn sendQuicStreamFrame(self: *GrpcStream, data: []const u8, fin: bool) !void {
-        var packet = std.ArrayList(u8){};
+        var packet = std.ArrayList(u8).empty;
         defer packet.deinit(self.allocator);
 
         // QUIC header (simplified)
@@ -548,7 +548,7 @@ pub const QuicGrpcClient = struct {
         const stream = try self.connection.?.createStream();
 
         // Send headers for client streaming
-        var headers = std.ArrayList(u8){};
+        var headers = std.ArrayList(u8).empty;
         defer headers.deinit(self.allocator);
 
         try headers.appendSlice(self.allocator, ":method POST\r\n");
@@ -578,7 +578,7 @@ pub const QuicGrpcClient = struct {
         const stream = try self.connection.?.createStream();
 
         // Send headers for bidirectional streaming
-        var headers = std.ArrayList(u8){};
+        var headers = std.ArrayList(u8).empty;
         defer headers.deinit(self.allocator);
 
         try headers.appendSlice(self.allocator, ":method POST\r\n");

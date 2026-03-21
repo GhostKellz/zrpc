@@ -131,7 +131,7 @@ pub const Client = struct {
     }
 
     fn sendHeaders(self: *Client, stream: Stream, method: []const u8) Error!void {
-        var headers = std.ArrayList(u8){};
+        var headers = std.ArrayList(u8).empty;
         defer headers.deinit(self.allocator);
 
         // Build gRPC headers
@@ -164,7 +164,7 @@ pub const Client = struct {
 
     fn sendData(self: *Client, stream: Stream, data: []const u8, end_stream: bool) Error!void {
         // gRPC message framing: [compressed flag (1 byte)][length (4 bytes)][data]
-        var framed_data = std.ArrayList(u8){};
+        var framed_data = std.ArrayList(u8).empty;
         defer framed_data.deinit(self.allocator);
 
         try framed_data.append(self.allocator, 0); // Not compressed
@@ -185,7 +185,7 @@ pub const Client = struct {
     fn readResponse(self: *Client, stream: Stream, timeout_ms: u32) Error![]u8 {
         _ = timeout_ms; // TODO: Implement timeout handling
 
-        var response_data = std.ArrayList(u8){};
+        var response_data = std.ArrayList(u8).empty;
         defer response_data.deinit(self.allocator);
 
         var headers_received = false;

@@ -32,9 +32,9 @@ fn getMonotonicNs() i128 {
 /// 4. Backward compatibility verification
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    defer _ = debug_allocator.deinit();
+    const allocator = debug_allocator.allocator();
 
     std.debug.print("\n=== RC-5: Final Validation and Release Preparation ===\n\n", .{});
 

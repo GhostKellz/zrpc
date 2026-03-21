@@ -121,7 +121,7 @@ pub const Server = struct {
             .config = config,
             .handlers = std.StringHashMap(ServiceHandler).init(allocator),
             .is_running = std.atomic.Value(bool).init(false),
-            .active_connections = std.ArrayList(*ActiveConnection){},
+            .active_connections = std.ArrayList(*ActiveConnection).empty,
             .shutdown_wg = zsync.WaitGroup.init(),
         };
     }
@@ -145,7 +145,7 @@ pub const Server = struct {
             .config = config,
             .handlers = std.StringHashMap(ServiceHandler).init(allocator),
             .is_running = std.atomic.Value(bool).init(false),
-            .active_connections = std.ArrayList(*ActiveConnection){},
+            .active_connections = .empty,
             .runtime = runtime,
             .executor = executor,
             .connection_semaphore = semaphore,
@@ -308,7 +308,7 @@ pub const Server = struct {
 
     fn handleStream(self: *Server, stream: Stream) Error!void {
         var method: ?[]u8 = null;
-        var request_data = std.ArrayList(u8){};
+        var request_data = std.ArrayList(u8).empty;
         defer {
             if (method) |m| self.allocator.free(m);
             request_data.deinit(self.allocator);
@@ -370,7 +370,7 @@ pub const Server = struct {
         defer request_ctx.deinit();
 
         // Create response context
-        var response_data = std.ArrayList(u8){};
+        var response_data = std.ArrayList(u8).empty;
         defer response_data.deinit(self.allocator);
 
         var response_ctx = ResponseContext.init(self.allocator, &.{});
@@ -423,7 +423,7 @@ pub const Server = struct {
 
     fn sendResponse(self: *Server, stream: Stream, response_data: []const u8) Error!void {
         // Send response headers
-        var headers = std.ArrayList(u8){};
+        var headers = std.ArrayList(u8).empty;
         defer headers.deinit(self.allocator);
 
         try headers.appendSlice(self.allocator, ":status");
@@ -448,7 +448,7 @@ pub const Server = struct {
         };
 
         // Send response data
-        var framed_data = std.ArrayList(u8){};
+        var framed_data = std.ArrayList(u8).empty;
         defer framed_data.deinit(self.allocator);
 
         try framed_data.append(self.allocator, 0); // Not compressed
@@ -466,7 +466,7 @@ pub const Server = struct {
     }
 
     fn sendErrorResponse(self: *Server, stream: Stream, status_code: u32, message: []const u8) Error!void {
-        var headers = std.ArrayList(u8){};
+        var headers = std.ArrayList(u8).empty;
         defer headers.deinit(self.allocator);
 
         try headers.appendSlice(self.allocator, ":status");

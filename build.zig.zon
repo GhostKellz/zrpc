@@ -43,7 +43,7 @@
         },
         .zpack = .{
             .url = "https://github.com/ghostkellz/zpack/archive/main.tar.gz",
-            .hash = "zpack-0.3.5-_6t6JopMCgA2fqzNu_FxDCHaUH2DMwez2Q36MeXX4m0K",
+            .hash = "zpack-0.3.5-_6t6Jg9NCgBjSMY0sNE_OYnG2q9Ve9SzKntcnJYXq8x6",
         },
         .zdoc = .{
             .url = "https://github.com/ghostkellz/zdoc/archive/main.tar.gz",
